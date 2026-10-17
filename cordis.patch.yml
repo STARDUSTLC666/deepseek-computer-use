@@ -1,8 +1,9 @@
 # dsh-computer-use-windows —— Windows 桌面控制（Computer Use）插件。
 #
-# 安装即向宿主注册 14 个工具：list_apps / list_windows / get_window / launch_app /
+# 安装即向宿主注册 16 个工具：list_apps / list_windows / get_window / launch_app /
 # get_window_state / click / press_key / type_text / scroll / set_value / drag /
-# perform_secondary_action / activate_window / computer_use_health。
+# perform_secondary_action / activate_window / start_audio_recording /
+# stop_audio_recording / computer_use_health。
 #
 # 首次加载会在 native/bin 下用系统自带 csc.exe 编译 helper（无需 .NET SDK、
 # 无 npm 原生依赖）。全部配置项都有安全默认值，空配置即可启动：
@@ -19,7 +20,8 @@
 #       snapshotTtlMs: 120000
 #       dryRun: false
 #       toolPrefix: ''             # 例如 cu_ 可避免与其他插件的 click 重名
-#       audio: false               # 开启 WASAPI 环回录音（start/stop_audio_recording）
+#       audio: false             # 开启 WASAPI 环回录音（start/stop_audio_recording）
+#       redactApps: []           # 这些应用的截图永不出机器，例如 ["1password"]
 - insert:
     - id: dsh-computer-use-windows
       name: dsh-computer-use-windows

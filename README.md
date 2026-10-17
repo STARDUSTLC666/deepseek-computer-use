@@ -278,7 +278,7 @@ marker 文件按 **会话 + turn** 命名，避免旧会话的 Esc 标记误伤�
     - id: computer-use
       name: dsh-computer-use-windows
       config:
-        approval: auto          # auto | always | never
+        approval: sensitive     # never | sensitive | always
         appConsent: session     # 每个应用问一次；never 表示不问
         audio: false            # 开启 WASAPI 环回录音（start/stop_audio_recording）
         redactApps: []          # 这些应用的截图永不出机器，例如 ["1password", "银行"]
