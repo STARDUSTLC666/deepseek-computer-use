@@ -24,7 +24,7 @@ npm install --save github:STARDUSTLC666/dsh-computer-use-windows
 
 ```yaml
 - insert:
-    - id: computer-use
+    - id: dsh-computer-use-windows
       name: dsh-computer-use-windows
 ```
 
@@ -275,7 +275,7 @@ marker 文件按 **会话 + turn** 命名，避免旧会话的 Esc 标记误伤�
 
 ```yaml
 - insert:
-    - id: computer-use
+    - id: dsh-computer-use-windows
       name: dsh-computer-use-windows
       config:
         approval: sensitive     # never | sensitive | always
