@@ -1,0 +1,10 @@
+node_modules/
+native/bin/
+native/*/bin/
+native/*/obj/
+test/bin/
+test/.out/
+*.tgz
+*.log
+.DS_Store
+Thumbs.db

@@ -1,0 +1,65 @@
+{
+  "name": "dsh-computer-use-windows",
+  "version": "0.1.0",
+  "description": "Windows Computer Use for DeepSeek Harness: UIA observation, SendInput actions, occlusion-free window capture — modeled on Codex's window2 API and adapted to DSH.",
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib",
+    "native/Json.cs",
+    "native/Driver.cs",
+    "native/Program.cs",
+    "native/Overlay.cs",
+    "native/audio/Audio.csproj",
+    "native/audio/Program.cs",
+    "native/wgcfw/Capture.csproj",
+    "native/wgcfw/Program.cs",
+    "skills",
+    "cordis.patch.yml",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "node lib/build.mjs",
+    "build:helper": "node lib/build.mjs",
+    "test": "node test/integration.mjs",
+    "test:all": "node test/integration.mjs && node test/parity.mjs && node test/parity-js.mjs"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "engines": {
+    "node": ">=18.17"
+  },
+  "keywords": [
+    "dsh",
+    "deepseek-harness",
+    "dsh-plugin",
+    "computer-use",
+    "windows",
+    "uia",
+    "desktop-automation",
+    "wgc",
+    "accessibility"
+  ],
+  "license": "MIT",
+  "author": "STARDUSTLC666",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/STARDUSTLC666/dsh-computer-use-windows.git"
+  },
+  "homepage": "https://github.com/STARDUSTLC666/dsh-computer-use-windows#readme",
+  "bugs": {
+    "url": "https://github.com/STARDUSTLC666/dsh-computer-use-windows/issues"
+  },
+  "os": [
+    "win32"
+  ]
+}
