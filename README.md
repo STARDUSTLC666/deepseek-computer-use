@@ -93,9 +93,13 @@ dsh web --no-open
 
 ## 它解决什么问题
 
-DSH 本体没有鼠标键盘工具，只能跑命令、读写文件。需要"操作图形界面"时（点按钮、
-填表单、操作没有 API 的桌面软件），这个插件补上这一层，并且把每一步都变成**可观测、
-可审批、可验证**的动作。
+DSH 官方已有需要显式启用的实验性 Computer Use 方案，包括 Cua Driver MCP 与原生
+提供方；其上游 Cua Driver 也支持 Windows。详见 [官方计算机操作文档](https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/subsystems/computer-use.zh.md)
+和 [Cua Driver 平台支持](https://github.com/trycua/cua/blob/main/docs/content/docs/reference/cua-driver/contracts.mdx)。
+
+本插件是另一套独立的 Windows 社区实现，提供 UI Automation、窗口截图、鼠标键盘、
+会话授权、审批审计和中断恢复，用于点击按钮、填写表单或操作没有 API 的桌面软件。
+它与官方方案有功能重合；本项目的验收结果不代表已与官方驱动做过效果或性能对比。
 
 ## 架构
 
