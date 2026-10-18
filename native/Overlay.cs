@@ -374,7 +374,7 @@ public sealed class StripForm : Form
                 // halo: widest + faintest first, then tighten
                 for (int i = 3; i >= 1; i--)
                 {
-                    float width = i * 2.6f;
+                    float width = i * 3.2f;
                     int alpha = Math.Max(6, glowAlpha / (i + 1));
                     using (Pen halo = new Pen(Color.FromArgb(alpha, accent), width))
                     {
@@ -393,7 +393,7 @@ public sealed class StripForm : Form
                 }
 
                 // core hairline
-                using (Pen core = new Pen(Color.FromArgb(coreAlpha, accent), 1.4f))
+                using (Pen core = new Pen(Color.FromArgb(coreAlpha, accent), 2f))
                 {
                     core.Alignment = PenAlignment.Center;
                     if (vertical)
@@ -497,7 +497,7 @@ internal sealed class Controller : ApplicationContext
     delegate IntPtr LowLevelKeyboardProc(int nCode, IntPtr wParam, IntPtr lParam);
 
     const int Radius = 18;   // corner radius
-    const int Glow = 12;     // band the halo fades inside
+    const int Glow = 16;     // band the halo fades inside
 
     public Controller(int ttlMs)
     {
@@ -533,8 +533,8 @@ internal sealed class Controller : ApplicationContext
         Rectangle screen = SystemInformation.VirtualScreen;
         // slow 3.2s breath: the frame gets a little brighter and a touch wider
         double phase = (Math.Sin(_tick / 26.0 - 1.57) + 1.0) / 2.0;
-        int coreAlpha = 170 + (int)Math.Round(70 * phase);
-        int glowAlpha = 26 + (int)Math.Round(20 * phase);
+        int coreAlpha = 200 + (int)Math.Round(55 * phase);   // clearly visible, still a hairline
+        int glowAlpha = 42 + (int)Math.Round(26 * phase);
         int thickness = Glow;
 
         int x0 = screen.Left, y0 = screen.Top, w = screen.Width, h = screen.Height;
