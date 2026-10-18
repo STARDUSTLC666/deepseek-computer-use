@@ -33,7 +33,23 @@ const wins = await registry.get('list_windows').execute({}, execFor(1, 'c1'));
 const target = wins.windows.find(w => String(w.title).includes('DSH CU Test Form'));
 const click = (e, x = 400, y = 250) => registry.get('click').execute({ window: { id: target.id }, x, y }, e);
 
-console.log('turn1 click ->', (await click(execFor(1, 'c1'))).clicked);
+// A focus-stealing utility (ProcessLasso and friends) can hold the foreground; the
+// plugin then refuses to inject. Retry, and skip cleanly if the environment refuses.
+let first = null;
+for (let attempt = 1; attempt <= 4 && first === null; attempt++) {
+  try { first = await click(execFor(1, 'c1')); }
+  catch (error) {
+    if (error.code !== 'focus_failed' || attempt === 4) {
+      if (error.code === 'focus_failed') {
+        console.log('SKIPPED: another process holds the foreground (' + String(error.message).slice(0, 60) + '...)');
+        process.exit(0);
+      }
+      throw error;
+    }
+    await new Promise(r => setTimeout(r, 700));
+  }
+}
+console.log('turn1 click ->', first.clicked);
 await new Promise(r => setTimeout(r, 400));
 try { await registry.get('press_key').execute({ window: { id: target.id }, key: 'Escape' }, execFor(1, 'c1')); } catch (e) { console.log('press_key ->', e.code); }
 await new Promise(r => setTimeout(r, 700));

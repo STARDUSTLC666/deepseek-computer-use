@@ -238,7 +238,7 @@ node test/integration.mjs
 
 固定装置是一个独立的 WinForms 可执行文件（`test/bin/dsh-cu-fixture.exe`，一个文本框 +
 一个名为 "Delete all" 的按钮；特意不用 shell 托管——shell 窗口本身被硬拒绝）。覆盖：
-14 个工具注册、截图数组与 origin/zIndex、`accessibility:null` 语义、`set_value`、
+16 个工具注册、截图数组与 origin/zIndex、`accessibility:null` 语义、`set_value`、
 `type_text`、危险按钮触发审批、`dryRun` 不落地、`denyApps` 拒绝、Win 键硬拒绝、
 `scroll` 契约。
 
@@ -289,6 +289,9 @@ marker 文件按 **会话 + turn** 命名，避免旧会话的 Esc 标记误伤�
         audio: false            # 开启 WASAPI 环回录音（start/stop_audio_recording）
         redactApps: []          # 这些应用的截图永不出机器，例如 ["1password", "银行"]
         defaultIncludeScreenshot: true
+        timeoutMs: 10000        # 单次 RPC 超时（launch_app 用 launchTimeoutMs）
+        helperPath: null        # 覆盖 helper 路径（仅信任场景）
+        riskyPattern: ''        # 自定义「危险动作」正则，命中走审批
         toolPrefix: ''          # 例如 cu_ 可避免和其他插件的 click 重名
 ```
 
@@ -297,6 +300,8 @@ marker 文件按 **会话 + turn** 命名，避免旧会话的 Esc 标记误伤�
 - 只支持 Windows；驱动层是接口（`IPlatformDriver`），macOS / Linux 可照着补。
 - Codex window2 没有的接口（`paste` / `clipboard_*` / `key_down` / `move`）这里也没有。
 - `App.useCount` 没有数据来源，按可选字段留空，不伪造。
+- `redactApps` 在**插件层**执行：直接调用 helper 的 RPC 不受它约束，别把 helper 单独暴露给非受信调用方。
+- 抢焦点类工具（如 ProcessLasso）会让 `type_text` 返回 `focus_failed`，这是设计行为——宁可不输入，也不打到别的窗口。
 
 ## License
 

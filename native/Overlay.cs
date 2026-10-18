@@ -52,9 +52,6 @@ public static class Native
     public const int ULW_ALPHA = 2;
     public const uint SPI_SETCURSORS = 0x0057;
 
-    public static bool LastLayerOk = true;
-    public static int LastLayerError = 0;
-
     public static void ApplyLayered(Form form, Bitmap surface)
     {
         IntPtr screenDc = GetDC(IntPtr.Zero);
@@ -67,8 +64,7 @@ public static class Native
             POINT src = new POINT { X = 0, Y = 0 };
             SIZE size = new SIZE { CX = surface.Width, CY = surface.Height };
             BLENDFUNCTION blend = new BLENDFUNCTION { BlendOp = 0, BlendFlags = 0, SourceConstantAlpha = 255, AlphaFormat = 1 };
-            LastLayerOk = UpdateLayeredWindow(form.Handle, screenDc, ref dst, ref size, memDc, ref src, 0, ref blend, ULW_ALPHA);
-            LastLayerError = LastLayerOk ? 0 : Marshal.GetLastWin32Error();
+            UpdateLayeredWindow(form.Handle, screenDc, ref dst, ref size, memDc, ref src, 0, ref blend, ULW_ALPHA);
         }
         finally
         {
@@ -203,19 +199,6 @@ public sealed class CursorForm : Form
                     outline.LineJoin = LineJoin.Round;
                     g.DrawPolygon(outline, arrow);
                 }
-            }
-            string dump = Environment.GetEnvironmentVariable("DSH_CU_DUMP");
-            if (!string.IsNullOrEmpty(dump))
-            {
-                try
-                {
-                    surface.Save(dump, ImageFormat.Png);
-                    System.IO.File.AppendAllText(dump + ".log",
-                        DateTime.Now.ToString("HH:mm:ss.fff") + " visible=" + Visible + " handle=" + Handle.ToInt64() +
-                        " bounds=" + Left + "," + Top + " " + Width + "x" + Height +
-                        " layerOk=" + Native.LastLayerOk + " err=" + Native.LastLayerError + "\n");
-                }
-                catch { }
             }
             if (!Visible) Show();
             Native.ApplyLayered(this, surface);

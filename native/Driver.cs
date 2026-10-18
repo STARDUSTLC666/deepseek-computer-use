@@ -184,12 +184,9 @@ public class WindowsDriver : IPlatformDriver
     Process _overlay;
     DateTime _overlayUntil = DateTime.MinValue;
     string _overlayCancelFile;
-    string _overlayImage = "";
-    string _overlayCrop = "";
     string _overlayText = "DSH 正在使用您的电脑";
     string _overlayHint = "Esc 取消";
     string _overlayAccent = "#3f7fd8";
-    string _overlayCorner = "br";
     string _cursorFile;      // the overlay polls this to draw the virtual cursor
     /// Turn token that the user interrupted with Esc. Codex persists the same
     /// fact as a marker file per conversation+turn; here the token travels with
@@ -340,18 +337,12 @@ public class WindowsDriver : IPlatformDriver
 
     public Dictionary<string, object> OverlayShow(Dictionary<string, object> p)
     {
-        string image = Json.GetString(p, "image");
-        if (!string.IsNullOrEmpty(image)) _overlayImage = image;
-        string crop = Json.GetString(p, "crop");
-        if (!string.IsNullOrEmpty(crop)) _overlayCrop = crop;
         string text = Json.GetString(p, "text");
         if (!string.IsNullOrEmpty(text)) _overlayText = text;
         string hint = Json.GetString(p, "hint");
         if (!string.IsNullOrEmpty(hint)) _overlayHint = hint;
         string accent = Json.GetString(p, "accent");
         if (!string.IsNullOrEmpty(accent)) _overlayAccent = accent;
-        string corner = Json.GetString(p, "corner");
-        if (!string.IsNullOrEmpty(corner)) _overlayCorner = corner;
         EnsureOverlay(Json.GetLong(p, "ttlMs", 20000));
         Dictionary<string, object> r = new Dictionary<string, object>();
         r["visible"] = true;
@@ -391,7 +382,6 @@ public class WindowsDriver : IPlatformDriver
         args.Append(" --text \"").Append(_overlayText).Append('"');
         args.Append(" --hint \"").Append(_overlayHint).Append('"');
         args.Append(" --accent \"").Append(_overlayAccent).Append('"');
-        args.Append(" --corner ").Append(_overlayCorner);
         if (_cursorFile != null) args.Append(" --cursor-file \"").Append(_cursorFile).Append('"');
         if (Environment.GetEnvironmentVariable("DSH_CU_SUPPRESS_CURSOR") == "1") args.Append(" --suppress-cursor");
         try
@@ -811,8 +801,13 @@ public class WindowsDriver : IPlatformDriver
             for (int i = 0; i < args.Count; i++)
             {
                 if (i > 0) argLine.Append(' ');
-                string a = Convert.ToString(args[i], System.Globalization.CultureInfo.InvariantCulture);
-                if (a.IndexOf(' ') >= 0) argLine.Append('"').Append(a).Append('"');
+                string a = Convert.ToString(args[i], System.Globalization.CultureInfo.InvariantCulture) ?? "";
+                // A quote or newline would let a caller smuggle extra arguments past the
+                // single quoting rule below, so refuse instead of guessing.
+                if (a.IndexOf('"') >= 0 || a.IndexOf('\n') >= 0 || a.IndexOf('\r') >= 0)
+                    throw new ToolError("bad_request", "launch_app argument " + i + " contains a quote or newline; pass a single plain argument");
+                if (a.Length == 0 || a.IndexOf(' ') >= 0 || a.IndexOf('\t') >= 0)
+                    argLine.Append('"').Append(a).Append('"');
                 else argLine.Append(a);
             }
             psi.Arguments = argLine.ToString();
@@ -1642,13 +1637,16 @@ public class WindowsDriver : IPlatformDriver
         EnsureOverlay(8000);
         IntPtr h = ResolveWindow(p);
         AssertAppApproved(h);
-        Activate(h);
+        // Validation first: an invalid call must not activate a window or move the pointer.
         double scrollY = Json.GetDouble(p, "scrollY", 0);
         double scrollX = Json.GetDouble(p, "scrollX", 0);
         double x = Json.GetDouble(p, "x", double.NaN);
         double y = Json.GetDouble(p, "y", double.NaN);
         if (double.IsNaN(x) || double.IsNaN(y))
             throw new ToolError("bad_request", "scroll requires finite 'x' and 'y' (the point to scroll from, in window/screenshot coordinates); click a pane first if it needs focus");
+        if (Math.Abs(scrollX) < 0.0001 && Math.Abs(scrollY) < 0.0001)
+            throw new ToolError("bad_request", "scroll requires a non-zero scrollX or scrollY");
+        Activate(h);
         int sx, sy;
         string scrollShot = Json.GetString(p, "screenshotId");
         int originLeft, originTop;
@@ -1685,6 +1683,12 @@ public class WindowsDriver : IPlatformDriver
         EnsureOverlay(8000);
         IntPtr h = ResolveWindow(p);
         AssertAppApproved(h);
+        double fromX = Json.GetDouble(p, "from_x", double.NaN);
+        double fromY = Json.GetDouble(p, "from_y", double.NaN);
+        double toX = Json.GetDouble(p, "to_x", double.NaN);
+        double toY = Json.GetDouble(p, "to_y", double.NaN);
+        if (double.IsNaN(fromX) || double.IsNaN(fromY) || double.IsNaN(toX) || double.IsNaN(toY))
+            throw new ToolError("bad_request", "drag requires finite from_x/from_y/to_x/to_y (window-relative pixels)");
         Activate(h);
         int originX, originY;
         double dragScaleX = 1.0, dragScaleY = 1.0;
@@ -1692,8 +1696,8 @@ public class WindowsDriver : IPlatformDriver
         if (!string.IsNullOrEmpty(dragShot))
         {
             ShotRegion region = ResolveShot(h, dragShot);
-            AssertPointInsideShot(Json.GetDouble(p, "from_x", double.NaN), Json.GetDouble(p, "from_y", double.NaN), region, dragShot, "drag start");
-            AssertPointInsideShot(Json.GetDouble(p, "to_x", double.NaN), Json.GetDouble(p, "to_y", double.NaN), region, dragShot, "drag end");
+            AssertPointInsideShot(fromX, fromY, region, dragShot, "drag start");
+            AssertPointInsideShot(toX, toY, region, dragShot, "drag end");
             originX = region.OriginX; originY = region.OriginY;
             dragScaleX = region.ScaleX; dragScaleY = region.ScaleY;
         }
@@ -1702,10 +1706,10 @@ public class WindowsDriver : IPlatformDriver
             RECT b = BoundsOf(h);
             originX = b.Left; originY = b.Top;
         }
-        int fx = originX + (int)Math.Round(Json.GetDouble(p, "from_x", 0) * dragScaleX);
-        int fy = originY + (int)Math.Round(Json.GetDouble(p, "from_y", 0) * dragScaleY);
-        int tx = originX + (int)Math.Round(Json.GetDouble(p, "to_x", 0) * dragScaleX);
-        int ty = originY + (int)Math.Round(Json.GetDouble(p, "to_y", 0) * dragScaleY);
+        int fx = originX + (int)Math.Round(fromX * dragScaleX);
+        int fy = originY + (int)Math.Round(fromY * dragScaleY);
+        int tx = originX + (int)Math.Round(toX * dragScaleX);
+        int ty = originY + (int)Math.Round(toY * dragScaleY);
 
         MarkCursor(fx, fy);
         SetCursorPos(fx, fy);
