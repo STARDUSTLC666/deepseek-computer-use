@@ -1,4 +1,4 @@
-# dsh-computer-use-windows
+# @stardustlc666/dsh-computer-use-windows
 
 给 DeepSeek Harness 的 **Windows 桌面控制（Computer Use）** 插件。
 
@@ -17,15 +17,15 @@ UI Automation、WGC）。
 
 ```bash
 # 从 GitHub 安装（尚未发布到 npm）
-npm install --save github:STARDUSTLC666/dsh-computer-use-windows
+npm install --save @stardustlc666/dsh-computer-use-windows
 ```
 
 然后在本机 profile 的 `cordis.patch.yml` 里启用（详见本文件末尾的配置示例）：
 
 ```yaml
 - insert:
-    - id: dsh-computer-use-windows
-      name: dsh-computer-use-windows
+    - id: @stardustlc666/dsh-computer-use-windows
+      name: '@stardustlc666/dsh-computer-use-windows'
 ```
 
 首次调用任意 Computer Use 工具时会自动编译 helper 与覆盖层（约 1 秒）。
@@ -150,7 +150,7 @@ cd "E:\path\to\dsh-computer-use"
 ## 配置
 
 ```yaml
-- id: dsh-computer-use-windows
+- id: @stardustlc666/dsh-computer-use-windows
   config:
     approval: sensitive            # never | sensitive | always
     allowApps: ["notepad", "chrome"]   # 空 = 不限制
@@ -275,8 +275,8 @@ marker 文件按 **会话 + turn** 命名，避免旧会话的 Esc 标记误伤�
 
 ```yaml
 - insert:
-    - id: dsh-computer-use-windows
-      name: dsh-computer-use-windows
+    - id: @stardustlc666/dsh-computer-use-windows
+      name: '@stardustlc666/dsh-computer-use-windows'
       config:
         approval: sensitive     # never | sensitive | always
         appConsent: session     # 每个应用问一次；never 表示不问

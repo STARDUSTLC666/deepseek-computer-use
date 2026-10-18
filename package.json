@@ -1,5 +1,5 @@
 {
-  "name": "dsh-computer-use-windows",
+  "name": "@stardustlc666/dsh-computer-use-windows",
   "version": "0.1.0",
   "description": "Windows Computer Use for DeepSeek Harness: UIA observation, SendInput actions, occlusion-free window capture — modeled on Codex's window2 API and adapted to DSH.",
   "type": "module",
@@ -61,5 +61,8 @@
   },
   "os": [
     "win32"
-  ]
+  ],
+  "publishConfig": {
+    "access": "public"
+  }
 }

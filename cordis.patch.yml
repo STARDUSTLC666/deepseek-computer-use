@@ -1,4 +1,4 @@
-# dsh-computer-use-windows —— Windows 桌面控制（Computer Use）插件。
+# @stardustlc666/dsh-computer-use-windows —— Windows 桌面控制（Computer Use）插件。
 #
 # 安装即向宿主注册 16 个工具：list_apps / list_windows / get_window / launch_app /
 # get_window_state / click / press_key / type_text / scroll / set_value / drag /
@@ -8,7 +8,7 @@
 # 首次加载会在 native/bin 下用系统自带 csc.exe 编译 helper（无需 .NET SDK、
 # 无 npm 原生依赖）。全部配置项都有安全默认值，空配置即可启动：
 #
-#   - id: dsh-computer-use-windows
+#   - id: @stardustlc666/dsh-computer-use-windows
 #     config:
 #       approval: sensitive        # never | sensitive | always
 #       allowApps: []              # 空 = 不限制；可用 exe 路径子串或进程名
@@ -24,5 +24,5 @@
 #       redactApps: []           # 这些应用的截图永不出机器，例如 ["1password"]
 - insert:
     - id: dsh-computer-use-windows
-      name: dsh-computer-use-windows
+      name: '@stardustlc666/dsh-computer-use-windows'
       config: {}

@@ -1,5 +1,5 @@
 /**
- * Integration test for dsh-computer-use-windows.
+ * Integration test for @stardustlc666/dsh-computer-use-windows.
  *
  * Drives the real plugin against a deterministic WinForms fixture (one text
  * box + one destructive-looking button) through a fake DSH context, so it
