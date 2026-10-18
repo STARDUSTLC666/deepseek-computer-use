@@ -88,17 +88,19 @@ public static class Program
             if (p == null) p = new Dictionary<string, object>();
             // Codex ships the budget with every call (x-oai-cua-request-budget-ms) and the
             // helper honours it; here it bounds capture waits and marks overruns.
-            Budget.Begin(Json.GetLong(p, "__budgetMs", 0));
+            Budget.Begin(Json.GetLong(p, "__budgetMs", 0), Json.GetString(p, "__cancelFile"));
             try { if (_driver != null) _driver.Maintenance(); } catch { }
             object result = Dispatch(method, p);
             return Ok(id, result);
         }
         catch (ToolError te)
         {
+            try { _driver.InvalidateState(new Dictionary<string, object>()); } catch { }
             return Fail(id, te.Code, te.Message);
         }
         catch (Exception ex)
         {
+            try { _driver.InvalidateState(new Dictionary<string, object>()); } catch { }
             return Fail(id, "internal_error", ex.GetType().Name + ": " + ex.Message);
         }
     }
@@ -130,6 +132,7 @@ public static class Program
             case "configure": return _driver.Configure(p);
             case "approve_app": return _driver.ApproveApp(p);
             case "end_turn": return _driver.EndTurn(p);
+            case "invalidate_state": return _driver.InvalidateState(p);
             case "start_audio_recording": return _driver.StartAudioRecording(p);
             case "stop_audio_recording": return _driver.StopAudioRecording(p);
             case "shutdown": return new Dictionary<string, object> { { "bye", true } };

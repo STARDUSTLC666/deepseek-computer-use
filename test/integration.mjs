@@ -17,13 +17,13 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const stamp = 'CU-' + Date.now().toString(36).toUpperCase();
 const approvals = [];
 const saved = [];
-let disposeHandler = null;
+const disposeHandlers = [];
 
 function makeCtx(registry) {
   return {
     tools: { register: definition => { registry.set(definition.name, definition); return () => registry.delete(definition.name); } },
     logger: { warn: message => console.log('[warn]', message) },
-    on: (event, handler) => { if (event === 'dispose') disposeHandler = handler; return () => {}; },
+    on: (event, handler) => { if (event === 'dispose') disposeHandlers.push(handler); return () => {}; },
     get: service => {
       if (service === 'attachments') {
         return {
@@ -155,7 +155,6 @@ try {
   }
   console.log('OK');
 } finally {
-  try { disposeHandler?.(); } catch { /* best effort */ }
+  await Promise.allSettled(disposeHandlers.map(dispose => dispose()));
   try { fixture.kill(); } catch { /* already gone */ }
-  setTimeout(() => process.exit(0), 100);
 }

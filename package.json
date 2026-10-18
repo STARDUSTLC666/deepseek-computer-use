@@ -1,6 +1,6 @@
 {
   "name": "deepseek-computer-use",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Windows Computer Use for DeepSeek Harness: UIA observation, SendInput actions, Windows.Graphics.Capture — modeled on Codex's window2 API. Community plugin, not an official DeepSeek package.",
   "type": "module",
   "main": "lib/index.js",
@@ -22,13 +22,16 @@
     "skills",
     "cordis.patch.yml",
     "README.md",
+    "CHANGELOG.md",
     "LICENSE"
   ],
   "scripts": {
     "build": "node lib/build.mjs",
     "build:helper": "node lib/build.mjs",
-    "test": "node test/integration.mjs",
-    "test:all": "node test/integration.mjs && node test/parity.mjs && node test/parity-js.mjs"
+    "test": "node --test test/contracts.test.mjs test/bridge.test.mjs && node test/integration.mjs",
+    "test:contracts": "node --test test/contracts.test.mjs test/bridge.test.mjs",
+    "test:harness": "node test/harness.mjs",
+    "test:all": "npm test && node test/parity.mjs && node test/parity-js.mjs"
   },
   "dsh": {
     "bundle": {

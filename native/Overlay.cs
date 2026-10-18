@@ -22,6 +22,7 @@ public sealed class Config
     public static string Title = "DSH 正在使用您的电脑";
     public static string Hint = "Esc 取消";
     public static bool SuppressCursor = false;
+    public static int OwnerPid = 0;
     public static int Corner1 = 0; // unused placeholder kept for arg compatibility
     public static Color Accent = Color.FromArgb(63, 127, 216);
 }
@@ -557,6 +558,11 @@ internal sealed class Controller : ApplicationContext
     void Tick()
     {
         _tick++;
+        if (Config.OwnerPid > 0)
+        {
+            try { if (System.Diagnostics.Process.GetProcessById(Config.OwnerPid).HasExited) { ExitThreadCore(); return; } }
+            catch { ExitThreadCore(); return; }
+        }
         if (DateTime.UtcNow > _deadline) { ExitThreadCore(); return; }
 
         Rectangle screen = SystemInformation.VirtualScreen;
@@ -697,6 +703,7 @@ internal static class Program
             else if (a == "--text") Config.Title = args[i + 1];
             else if (a == "--hint") Config.Hint = args[i + 1];
             else if (a == "--ttl-ms") int.TryParse(args[i + 1], out ttlMs);
+            else if (a == "--owner-pid") int.TryParse(args[i + 1], out Config.OwnerPid);
         }
         Config.SuppressCursor = true;                                   // Codex default
         for (int i = 0; i < args.Length; i++) if (args[i] == "--no-suppress-cursor") Config.SuppressCursor = false;

@@ -7,7 +7,7 @@ using System.Windows.Forms;
 public static class FixtureForm
 {
     [STAThread]
-    public static void Main()
+    public static void Main(string[] args)
     {
         Application.EnableVisualStyles();
         Form form = new Form();
@@ -24,6 +24,13 @@ public static class FixtureForm
         TextBox box = new TextBox();
         box.Name = "cu-test-input";
         box.Left = 20; box.Top = 40; box.Width = 500;
+        if (args.Length == 2 && args[0] == "--progress-file")
+        {
+            string progressFile = args[1];
+            box.TextChanged += delegate {
+                try { System.IO.File.WriteAllText(progressFile, box.Text.Length.ToString()); } catch { }
+            };
+        }
         form.Controls.Add(box);
 
         Button clear = new Button();

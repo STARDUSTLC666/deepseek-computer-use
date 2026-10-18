@@ -46,9 +46,41 @@ npm run build          # helper + overlay（csc），再尝试 dotnet 编 captur
 ## 自检
 
 ```bash
-npm test               # 13 项断言：注册、观测、点击、审批、硬拒绝、Esc 阻断
-npm run test:all       # 追加 helper 协议/音频 与插件级一致性测试
+npm test               # DSH 参数/策略回归 + 原生 WinForms 集成验证
+npm run test:contracts # 只运行参数与策略测试，不操作桌面
+npm run test:harness -- --dsh-root /path/to/node_modules/@deepseek-ai/dsh
+# test:harness 启动隔离的真实 DSH CLI/profile，验证附件、审批和原生操作。
+# npm run test:all 另含真实系统音频录制测试，按需运行。
 ```
+
+## DeepSeek Harness 接入
+
+这是通过 DSH 的 `apply(ctx)` / `inject` / bundle patch 接入的独立插件。
+工具注册使用标准 JSON Schema，截图通过 `attachments` 保存并输出模型可见的 image block，
+应用授权与危险动作通过 `approval.request` 审批并写入会话审计。
+每个会话独立保存授权、helper、截图与元素快照；同一桌面的工具调用串行执行。
+DSH 附件存储缩小截图时，坐标会自动换算回原始抓屏像素。
+
+在需要使用的 DSH profile 中安装，例如 Git Bash 下：
+
+```bash
+dsh plugin --profile web add deepseek-computer-use
+dsh web --no-open
+```
+
+开发时可将包名换成 `file:E:/deepseek/dsh-computer-use` 来加载本地源码。
+以下宿主适配和失败恢复改进包含在 0.1.2 及后续版本中，详见 [更新记录](CHANGELOG.md)。
+`test:harness` 不调用模型、不录音，只操作自己创建的测试窗口，结束后移除隔离 profile。
+
+中止与失败恢复：
+
+- 超时或取消会先通知当前原生请求停止；输入循环检查取消标记，并在 `finally` 释放按键/鼠标按钮。
+  helper 未在 500ms 内退出时会被终止；调用失败返回前确认旧进程已经退出。
+- DSH 的 `session/event` 出现 `turn/end` 时主动停止该会话的 helper 和覆盖层，不依赖下一次工具调用。
+- 输入或抓屏失败会清除已缓存的快照。后续输入返回 `fresh_observation_required`，
+  必须成功调用 `get_window_state` 后再决定动作；不会自动重复结果不明的输入。
+- 新 helper 使用不同的截图 id，防止重启前的截图编号误命中新缓存。
+  原生协议已升级为 2，自定义 `helperPath` 也需要匹配版本。
 
 ## 它解决什么问题
 
@@ -73,7 +105,7 @@ DSH 宿主
 驱动层是接口（`IPlatformDriver`），今天是 `windows` 一个实现；macOS（AX + CGEvent）
 和 Linux（AT-SPI）可以照着补，插件层不用改。
 
-helper 常驻的原因：元素编号必须和"那一次观测"绑在同一个进程里，否则
+每个会话的 helper 常驻的原因：元素编号必须和"那一次观测"绑在同一个进程里，否则
 `click(element_index)` 无从解析。因此插件串行发请求、按 id 配对响应。
 
 ## 工具
@@ -139,6 +171,8 @@ Codex 用两层覆盖层告诉用户"AI 正在动你的电脑"，这里做的是
      `launch_app` 总是问
    - `always`：每次动作都问
    审批走 DSH 自己的 approval seam；**没有审批服务时直接拒绝**，绝不静默降级。
+   DSH 宿主的 `approval` 策略 `never` 表示拒绝需要审批的请求，与本插件配置项的
+   `approval: never`（跳过动作级询问）含义不同。应用授权仍由 `appConsent` 单独控制。
 3. **前台证明**：打字、按键、坐标点击、滚动必须先证明目标窗口真的拿到了前台，
    否则抛 `focus_failed` 并告诉你当前是谁占着前台。SendInput 会打到有焦点的窗口，
    这一步省不得。
@@ -171,17 +205,22 @@ cd "E:\path\to\dsh-computer-use"
     approval: sensitive            # never | sensitive | always
     allowApps: ["notepad", "chrome"]   # 空 = 不限制
     denyApps: []
-    defaultIncludeScreenshot: false    # 默认不抓图，省 token
+    defaultIncludeScreenshot: true     # 默认抓图；false 可显式关闭
     maxElements: 260
     snapshotTtlMs: 120000
     dryRun: false
     toolPrefix: ''                 # 填 'cu_' 可避免与其他插件的 click 重名
-    timeoutMs: 20000
+    timeoutMs: 10000
 ```
 
-## 契约对齐（对着 Codex 逐条核过）
+## 与 Codex Windows window2 的关系
 
-工具名与参数按 `@oai/sky` 的 window2 契约实现，不是"看着像"：
+工具以 `@oai/sky` 的 Windows window2 动作和观测语义为参照，底层也采用 UIA、SendInput、WGC。
+它是 DSH 的独立实现，不能据此认为具有相同的模型能力、成功率或全部运行时行为。
+
+DSH 接口有这些明确差异：`list_windows` / `list_apps` 分别返回 `{ windows, count }` /
+`{ apps, count }`；`window.app` 返回应用元数据对象，输入也接受字符串 app id 或只提供窗口 id；
+`get_window` 接收 `{ window: { id } }`；截图返回 DSH 附件引用和 image block，Codex 使用图片 URL。
 
 | 契约项 | Codex | 本插件 |
 |---|---|---|
@@ -194,22 +233,22 @@ cd "E:\path\to\dsh-computer-use"
 | 元素失效 | 编号只对产生它的观测有效 | 一致（TTL + helper 进程内缓存） |
 | 最小化窗口 | 不该给出无意义画面 | 本插件直接报 `window_minimized`（实测旧版会吐出 334×48 的假图） |
 | 键名 | X keysym + `Numpad_*` 别名 | 一致（`KP_0`/`Numpad_Add`/…） |
-| `list_apps` | `lastUsedDate`、`useCount` | `lastUsedDate` 有；`useCount` 无数据源，不编造 |
+| `list_apps` | `lastUsedDate`、`useCount` | `lastUsedDate` 用进程启动时间近似，并非用户最近使用时间；`useCount` 留空 |
 | `launch_app` | app id / `.exe` 路径（含 UWP） | exe 路径、AUMID（`shell:AppsFolder\\…`）、shell URI |
 | Win/Meta 键 | 硬拒绝 | 硬拒绝（插件层 + helper 层双保险） |
 | 终端/Run/密码管理器/安全软件/认证对话框/宿主自身 | 硬拒绝 | 硬拒绝（不可被审批覆盖） |
 | 按应用授权 | "Computer Use was not approved to use <app>" | 每会话每应用一次审批（`appConsent: session`），批准后下发 `approve_app`，**由 helper 强制**：未批准的应用直接 `app_not_approved` |
-| 回合边界 | 新 turn 时向 helper 发 `end_turn`，清元素快照 | 一致：token 变化即 `end_turn`（清快照/截图区/Esc 阻断，保留应用授权） |
+| 回合边界 | 回合与 helper 生命周期关联 | DSH 回合结束事件主动停止旧 helper；新回合创建新 helper，并重新下发已获应用授权 |
 | 请求预算 | 普通 10s、`launch_app` 15s | 一致（`timeoutMs` / `launchTimeoutMs`） |
-| 回合结束停止输入 | `turn_ended` 钩子 | 读会话日志判断 open turn，`turn_ended` 拒绝注入 |
+| 回合结束停止输入 | `turn_ended` 钩子 | 主动停止正在执行的请求，排队中的旧回合请求也被拒绝 |
 
-## 明确没做的（不属于 Windows window2 面）
+## 能力边界
 
 - **`paste` / `select_text`**：属于 macOS 的 window 客户端（`target: "mac"`），Windows 上不存在。
-- **播客/音频录制**（`start_audio_recording`）：契约里是可选方法，未实现。
+- **系统音频录制**（`start_audio_recording`）：已实现 WASAPI 环回录音，默认关闭，需要构建 audio helper 并单独授权。
 - **full-desktop 面**（`clipboard_read/write`、`key_down/up`、`move`、`drag_handle`、`get_screenshot`）：那是 `target: "linux"` 的 API。
-- **区域裁剪截图**：Codex 是"bounded screenshot"，我们截整窗（长边封顶 2560）。token 成本略高，语义一致。
-- **Windows.Graphics.Capture**：Codex 用 WGC；我们用 `PrintWindow(PW_RENDERFULLCONTENT)`，遮挡可用、最小化拒绝，不需要 D3D 互操作。
+- **区域裁剪截图**：当前抓整窗（长边封顶 2560），不能认为与 Codex 的 bounded screenshot 完全等价。
+- **Windows.Graphics.Capture**：构建 capture helper 后优先使用 WGC；不可用时回退到 PrintWindow / BitBlt，GPU 窗口的兼容性取决于实际使用的抓屏后端。
 
 ## 抓屏链路（对齐 Codex 的 WGC）
 
@@ -273,7 +312,7 @@ MIT。第三方商用前请自行做安全评审：这个插件能让模型操�
 
 | 能力 | 实现 |
 |---|---|
-| 协议握手 | helper 提供 `hello` → `{ protocolVersion: 1, capabilities: [...] }`；bridge 首次连接校验，不匹配直接报 `protocol_mismatch` |
+| 协议握手 | helper 提供 `hello` → `{ protocolVersion: 2, capabilities: [...] }`；bridge 首次连接校验，不匹配直接报 `protocol_mismatch` |
 | 每请求预算 | 客户端把预算随请求下发（`__budgetMs`，对应 Codex 的 `x-oai-cua-request-budget-ms`），helper 用它收缩抓屏等待 |
 | 坐标越界 | `point_outside_screenshot`，文案同 Codex（"is outside screenshot bounds … Take a fresh screenshot before retrying"） |
 | 截图失效 | `stale_screenshot` 带同一句 "Take a fresh screenshot before retrying" |

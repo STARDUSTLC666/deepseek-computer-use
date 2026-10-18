@@ -40,6 +40,7 @@ public interface IPlatformDriver : IDisposable
     Dictionary<string, object> Configure(Dictionary<string, object> p);
     Dictionary<string, object> ApproveApp(Dictionary<string, object> p);
     Dictionary<string, object> EndTurn(Dictionary<string, object> p);
+    Dictionary<string, object> InvalidateState(Dictionary<string, object> p);
     Dictionary<string, object> StartAudioRecording(Dictionary<string, object> p);
     Dictionary<string, object> StopAudioRecording(Dictionary<string, object> p);
 }
@@ -50,10 +51,24 @@ public interface IPlatformDriver : IDisposable
 public static class Budget
 {
     static long _deadlineTicks;
+    static string _cancelFile;
 
-    public static void Begin(long ms)
+    public static void Begin(long ms, string cancelFile)
     {
         _deadlineTicks = ms > 0 ? DateTime.UtcNow.Ticks + ms * TimeSpan.TicksPerMillisecond : 0;
+        _cancelFile = cancelFile;
+    }
+
+    public static void Check()
+    {
+        if (_cancelFile != null && File.Exists(_cancelFile))
+        {
+            string reason = "cancelled";
+            try { reason = File.ReadAllText(_cancelFile).Trim(); } catch { }
+            if (reason != "turn_ended" && reason != "timeout") reason = "cancelled";
+            throw new ToolError(reason, "the native request was stopped; take a fresh observation before continuing");
+        }
+        if (Expired()) throw new ToolError("timeout", "the native request exceeded its time budget");
     }
 
     public static long RemainingMs()
@@ -206,6 +221,7 @@ public class WindowsDriver : IPlatformDriver
     readonly Dictionary<string, ShotRegion> _shots = new Dictionary<string, ShotRegion>();
     int _shotTtlMs = 120000;
     int _shotSeq = 0;
+    readonly string _shotGeneration = Guid.NewGuid().ToString("N");
 
     const uint GW_OWNER = 4;
     const int GWL_STYLE = -16;
@@ -218,7 +234,11 @@ public class WindowsDriver : IPlatformDriver
         try { SetProcessDPIAware(); } catch { }
     }
 
-    public void Dispose() { }
+    public void Dispose()
+    {
+        if (_cursorWatchdog != null) { _cursorWatchdog.Dispose(); _cursorWatchdog = null; }
+        StopOverlay();
+    }
 
     // ---- approval plumbing ----
     public Dictionary<string, object> Configure(Dictionary<string, object> p)
@@ -253,6 +273,13 @@ public class WindowsDriver : IPlatformDriver
         r["ended"] = true;
         r["approvedApps"] = (long)_approvedApps.Count;
         return r;
+    }
+
+    public Dictionary<string, object> InvalidateState(Dictionary<string, object> p)
+    {
+        lock (_sync) { _snapshots.Clear(); _shots.Clear(); }
+        StopOverlay();
+        return new Dictionary<string, object> { { "invalidated", true } };
     }
 
     void AssertAppApproved(IntPtr h)
@@ -385,6 +412,7 @@ public class WindowsDriver : IPlatformDriver
         args.Append(" --cancel-file \"").Append(_overlayCancelFile).Append('"');
         args.Append(" --text \"").Append(_overlayText).Append('"');
         args.Append(" --hint \"").Append(_overlayHint).Append('"');
+        args.Append(" --owner-pid ").Append(Process.GetCurrentProcess().Id);
         args.Append(" --accent \"").Append(_overlayAccent).Append('"');
         if (_cursorFile != null) args.Append(" --cursor-file \"").Append(_cursorFile).Append('"');
         // Suppression is the default (the virtual cursor stands in for the real one);
@@ -424,6 +452,7 @@ public class WindowsDriver : IPlatformDriver
 
     void CheckCancel(Dictionary<string, object> p)
     {
+        Budget.Check();
         string token = p == null ? null : Json.GetString(p, "turnToken");
         if (token != null && (token == _interruptedTurn || InterruptMarkerExists(token)))
             throw new ToolError("turn_stopped", EscMessage);
@@ -438,7 +467,7 @@ public class WindowsDriver : IPlatformDriver
         throw new ToolError("cancelled_by_user", EscMessage);
     }
 
-    const int ProtocolVersion = 1;
+    const int ProtocolVersion = 2;
 
     static string InterruptMarkerPath(string token)
     {
@@ -607,6 +636,8 @@ public class WindowsDriver : IPlatformDriver
     {
         Dictionary<string, object> d = new Dictionary<string, object>();
         d["platform"] = PlatformName;
+        d["pid"] = (long)Process.GetCurrentProcess().Id;
+        d["overlayPid"] = _overlay != null && !_overlay.HasExited ? (object)(long)_overlay.Id : null;
         d["ok"] = true;
         d["uia"] = true;
         return d;
@@ -1141,7 +1172,7 @@ public class WindowsDriver : IPlatformDriver
             if (zIndex < 0) zIndex = total - 1;
             Dictionary<string, object> shot = CaptureWindow(w);
             shot["zIndex"] = (long)(total - zIndex); // larger = visually above
-            string id = "shot-" + (++_shotSeq).ToString() + "-" + w.ToInt64().ToString();
+            string id = "shot-" + _shotGeneration + "-" + (++_shotSeq).ToString() + "-" + w.ToInt64().ToString();
             shot["id"] = id;
             RECT r = BoundsOf(w);
             lock (_sync)
@@ -1450,19 +1481,20 @@ public class WindowsDriver : IPlatformDriver
         SendInput(1, arr, Marshal.SizeOf(typeof(INPUT)));
     }
 
-    void ClickAt(int screenX, int screenY, int count, string button)
+    void ClickAt(int screenX, int screenY, int count, string button, Dictionary<string, object> p)
     {
         SetCursorPos(screenX, screenY);
         System.Threading.Thread.Sleep(35);
         for (int i = 0; i < Math.Max(1, count); i++)
         {
+            CheckCancel(p);
             if (i > 0) System.Threading.Thread.Sleep(60);
             uint down = MOUSEEVENTF_LEFTDOWN, up = MOUSEEVENTF_LEFTUP;
             if (button == "r") { down = MOUSEEVENTF_RIGHTDOWN; up = MOUSEEVENTF_RIGHTUP; }
             else if (button == "m") { down = MOUSEEVENTF_MIDDLEDOWN; up = MOUSEEVENTF_MIDDLEUP; }
             SendMouse(down);
-            System.Threading.Thread.Sleep(22);
-            SendMouse(up);
+            try { System.Threading.Thread.Sleep(22); }
+            finally { SendMouse(up); }
         }
     }
 
@@ -1528,7 +1560,8 @@ public class WindowsDriver : IPlatformDriver
 
         Activate(h); // pointer clicks need a real foreground window
         MarkCursor(sx, sy);
-        ClickAt(sx, sy, count, button);
+        CheckCancel(p);
+        ClickAt(sx, sy, count, button, p);
         Dictionary<string, object> r = new Dictionary<string, object>();
         r["clicked"] = "pointer";
         r["screenX"] = (long)sx;
@@ -1556,7 +1589,7 @@ public class WindowsDriver : IPlatformDriver
         string key = Json.GetString(p, "key");
         if (string.IsNullOrEmpty(key)) throw new ToolError("bad_request", "press_key requires 'key'");
         Activate(h);
-        Chord(key);
+        Chord(key, p);
         Dictionary<string, object> r = new Dictionary<string, object>();
         r["pressed"] = key;
         return r;
@@ -1614,7 +1647,7 @@ public class WindowsDriver : IPlatformDriver
         SendKey(vk, 0, flags);
     }
 
-    static void Chord(string chord)
+    void Chord(string chord, Dictionary<string, object> p)
     {
         string[] parts = chord.Split('+');
         List<ushort> keys = new List<ushort>();
@@ -1625,8 +1658,17 @@ public class WindowsDriver : IPlatformDriver
             keys.Add(ResolveKey(token));
         }
         if (keys.Count == 0) throw new ToolError("bad_request", "empty key chord");
-        for (int i = 0; i < keys.Count; i++) { SendVk(keys[i], false); System.Threading.Thread.Sleep(12); }
-        for (int i = keys.Count - 1; i >= 0; i--) { SendVk(keys[i], true); System.Threading.Thread.Sleep(12); }
+        int pressed = 0;
+        try
+        {
+            for (int i = 0; i < keys.Count; i++)
+            {
+                CheckCancel(p);
+                SendVk(keys[i], false); pressed++;
+                System.Threading.Thread.Sleep(12);
+            }
+        }
+        finally { for (int i = pressed - 1; i >= 0; i--) SendVk(keys[i], true); }
     }
 
     /// The Windows/Meta key family is hard-denied: it opens Run, Settings and
@@ -1667,6 +1709,7 @@ public class WindowsDriver : IPlatformDriver
         Activate(h);
         for (int i = 0; i < text.Length; i++)
         {
+            CheckCancel(p);
             char c = text[i];
             if (c == '\n') { SendVk(0x0D, false); SendVk(0x0D, true); continue; }
             if (c == '\t') { SendVk(0x09, false); SendVk(0x09, true); continue; }
@@ -1764,18 +1807,24 @@ public class WindowsDriver : IPlatformDriver
         MarkCursor(fx, fy);
         SetCursorPos(fx, fy);
         System.Threading.Thread.Sleep(60);
+        CheckCancel(p);
         SendMouse(MOUSEEVENTF_LEFTDOWN);
-        System.Threading.Thread.Sleep(80);
-        const int steps = 14;
-        for (int i = 1; i <= steps; i++)
+        try
         {
-            int x = fx + (tx - fx) * i / steps;
-            int y = fy + (ty - fy) * i / steps;
-            SetCursorPos(x, y);
-            System.Threading.Thread.Sleep(18);
+            System.Threading.Thread.Sleep(80);
+            const int steps = 14;
+            for (int i = 1; i <= steps; i++)
+            {
+                CheckCancel(p);
+                int x = fx + (tx - fx) * i / steps;
+                int y = fy + (ty - fy) * i / steps;
+                SetCursorPos(x, y);
+                System.Threading.Thread.Sleep(18);
+            }
+            System.Threading.Thread.Sleep(90);
+            CheckCancel(p);
         }
-        System.Threading.Thread.Sleep(90);
-        SendMouse(MOUSEEVENTF_LEFTUP);
+        finally { SendMouse(MOUSEEVENTF_LEFTUP); }
 
         Dictionary<string, object> r = new Dictionary<string, object>();
         r["dragged"] = true;

@@ -5,7 +5,8 @@ description: Drive Windows desktop apps through DSH Computer Use tools (UIA obse
 
 # Computer Use (Windows)
 
-The `deepseek-computer-use` plugin exposes the Codex window2 API on Windows.
+The `deepseek-computer-use` plugin provides Windows desktop tools for DSH,
+using window2-style action and observation semantics.
 Prefer shell, files and web tools whenever they can do the job: GUI automation is
 the slowest, most fragile option and it moves the user's real mouse and keyboard.
 
@@ -81,10 +82,12 @@ submit, publish, install, 删除, 卸载, 支付, 提交 …) asks for confirmat
 |---|---|---|
 | `stale_snapshot` | element indexes expired | `get_window_state include_text:true` again |
 | `stale_screenshot` | coordinate screenshot expired | observe again and use the new id |
+| `fresh_observation_required` | an earlier input or capture failed | observe again; discard every old index, screenshot id and coordinate before deciding the next action |
+| `timeout` | the old helper was stopped and its snapshots discarded | take a fresh observation; never repeat an input whose outcome is unknown |
+| `cancelled` / `turn_ended` | the active native request was stopped | stop issuing input and wait for a new turn |
 | `window_gone` | app closed / handle changed | `list_windows` again |
 | `window_minimized` | nothing to observe | `activate_window`, then observe |
 | `focus_failed` | another window holds the foreground | stop, ask the user; do not retry in a loop |
 | `screen_locked` | the desktop is locked (LockApp) | stop and ask the user to unlock |
 | `hard_denied` | the surface is never automatable | tell the user, do not route around it |
-| `turn_ended` | the turn is over | wait for the user to continue |
 | empty tree | Electron/Canvas surface | observe with the screenshot and act by coordinates |
