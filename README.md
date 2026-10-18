@@ -112,6 +112,9 @@ Codex 用两层覆盖层告诉用户"AI 正在动你的电脑"，这里做的是
 - 覆盖层存在期间常驻一个带描边和投影的白色指针，启动时落在真实指针位置，
   之后 0.35 缓动滑向每个动作点；背后一层极淡的强调色光晕
 - 默认抑制真实系统光标，退出/Esc/超时用 `SPI_SETCURSORS` 恢复；
+  **被强杀也能恢复**：抑制期间会在 `%LOCALAPPDATA%\dsh-computer-use\cursor-hidden.flag`
+  写上自己的 PID，下一次 helper 请求发现 PID 已失效就立刻还原光标；
+  不想抑制可以设 `DSH_CU_KEEP_CURSOR=1`；
   helper 强杀覆盖层时也会兜底恢复一次
 
 **DPI 关键点**：覆盖层进程必须 Per-Monitor-V2 感知，否则在 150% 缩放屏上
@@ -252,7 +255,7 @@ MIT。第三方商用前请自行做安全评审：这个插件能让模型操�
 | 文件 | 用途 | 大小 |
 |---|---|---|
 | `dsh-computer-use-helper.exe` | UIA / SendInput / 抓屏调度 / 音频调度 | ~50KB |
-| `dsh-cu-overlay.exe` | 鲸鱼娘 + 虚拟光标覆盖层 | ~30KB |
+| `dsh-cu-overlay.exe` | 呼吸光边 + 虚拟光标覆盖层 | ~30KB |
 | `capture/` | WGC 抓屏（.NET Framework 4.8 + SharpDX） | 0.68MB |
 | `audio/` | WASAPI 环回录音（NAudio） | 0.60MB |
 | **合计** | | **~1.4MB** |
