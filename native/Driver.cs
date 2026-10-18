@@ -184,6 +184,7 @@ public class WindowsDriver : IPlatformDriver
     // border and a virtual cursor; this is the DSH equivalent, and Esc is the kill
     // switch: the overlay drops a cancel file that every input path checks first.
     Process _overlay;
+    System.Threading.Timer _cursorWatchdog;
     DateTime _overlayUntil = DateTime.MinValue;
     string _overlayCancelFile;
     string _overlayText = "DSH 正在使用您的电脑";
@@ -212,6 +213,7 @@ public class WindowsDriver : IPlatformDriver
 
     public WindowsDriver()
     {
+        Maintenance(); // startup repair: a previous session may have died with cursors hidden
         try { SetThreadDpiAwarenessContext(new IntPtr(-4)); } catch { }
         try { SetProcessDPIAware(); } catch { }
     }
@@ -394,6 +396,12 @@ public class WindowsDriver : IPlatformDriver
             psi.UseShellExecute = false;
             _overlay = Process.Start(psi);
             _overlayUntil = DateTime.UtcNow.AddMilliseconds(ttlMs);
+            // Codex runs a dedicated system-cursor-manager process that restores the
+            // pointer the moment its parent dies. This timer gives the same guarantee
+            // without a second exe: if the overlay vanishes with cursors hidden, the
+            // pointer comes back within half a second, with no request needed.
+            if (_cursorWatchdog == null)
+                _cursorWatchdog = new System.Threading.Timer(delegate { try { Maintenance(); } catch { } }, null, 500, 500);
         }
         catch { _overlay = null; }
     }

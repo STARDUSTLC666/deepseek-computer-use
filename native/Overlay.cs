@@ -89,6 +89,8 @@ public static class Native
         return Path.Combine(dir, "cursor-hidden.flag");
     }
 
+    static IntPtr _blankCursor;
+
     public static void SuppressSystemCursors(bool suppress)
     {
         try
@@ -97,16 +99,23 @@ public static class Native
             {
                 SystemParametersInfo(SPI_SETCURSORS, 0, IntPtr.Zero, 0);
                 try { File.Delete(CursorFlagPath()); } catch { }
+                if (_blankCursor != IntPtr.Zero) { try { DestroyCursor(_blankCursor); } catch { } _blankCursor = IntPtr.Zero; }
                 return;
             }
-            byte[] andMask = new byte[128];
-            byte[] xorMask = new byte[128];
-            for (int i = 0; i < andMask.Length; i++) andMask[i] = 0xFF;
-            IntPtr blank = CreateCursor(IntPtr.Zero, 0, 0, 32, 32, andMask, xorMask);
+            // Cache the blank cursor: Windows resets the cursors on resume, display
+            // change and some logins, so the controller calls this again periodically
+            // (Codex calls the same "system cursor re-suppression").
+            if (_blankCursor == IntPtr.Zero)
+            {
+                byte[] andMask = new byte[128];
+                byte[] xorMask = new byte[128];
+                for (int i = 0; i < andMask.Length; i++) andMask[i] = 0xFF;
+                _blankCursor = CreateCursor(IntPtr.Zero, 0, 0, 32, 32, andMask, xorMask);
+            }
+            IntPtr blank = _blankCursor;
             if (blank == IntPtr.Zero) return;
             uint[] ids = new uint[] { 32512, 32513, 32514, 32515, 32516, 32631, 32640, 32641, 32642, 32643, 32644, 32645, 32646, 32648, 32649, 32650, 32651, 32671 };
             foreach (uint id in ids) SetSystemCursor(CopyIcon(blank), id);
-            DestroyCursor(blank);
             try
             {
                 Directory.CreateDirectory(Path.GetDirectoryName(CursorFlagPath()));
@@ -605,6 +614,10 @@ internal sealed class Controller : ApplicationContext
         }
         catch { }
 
+        // Windows restores the real cursors on resume / display change; put the blank
+        // ones back while the indicator is up (Codex: "schedule system cursor re-suppression").
+        if (Config.SuppressCursor && _tick % 40 == 0) Native.SuppressSystemCursors(true);
+
         if (!_cursor.Live)
         {
             PointNative p;
@@ -644,6 +657,36 @@ internal static class Program
         try { SetProcessDpiAwarenessContext(new IntPtr(-4)); } catch { }
         try { SetProcessDPIAware(); } catch { }
 
+        // Guard mode: wait for the owner, then restore the cursors. This must run before
+        // anything else - a guard that reached the suppression block would hide the
+        // cursors again and spawn another guard, and the chain would never stop.
+        int guardIndex = Array.IndexOf(args, "--cursor-guard");
+        if (guardIndex >= 0 && args.Length > guardIndex + 1)
+        {
+            int ownerPid;
+            if (int.TryParse(args[guardIndex + 1], out ownerPid) && ownerPid != System.Diagnostics.Process.GetCurrentProcess().Id)
+            {
+                try
+                {
+                    System.Diagnostics.Process owner = System.Diagnostics.Process.GetProcessById(ownerPid);
+                    owner.WaitForExit(600000); // hard cap: a guard never lives forever
+                }
+                catch { /* owner already gone */ }
+                // Only clean up our own owner's suppression: a newer overlay may have
+                // taken over the cursors in the meantime, and restoring them here would
+                // make the real pointer reappear under a live indicator.
+                bool ours = false;
+                try
+                {
+                    string flagPath = Native.CursorFlagPath();
+                    ours = File.Exists(flagPath) && File.ReadAllText(flagPath).Trim() == ownerPid.ToString();
+                }
+                catch { }
+                if (ours) Native.SuppressSystemCursors(false);
+            }
+            return;
+        }
+
         int ttlMs = 20000;
         for (int i = 0; i < args.Length - 1; i++)
         {
@@ -663,6 +706,16 @@ internal static class Program
         {
             Native.SuppressSystemCursors(true);
             AppDomain.CurrentDomain.ProcessExit += (s, e) => Native.SuppressSystemCursors(false);
+            try
+            {
+                System.Diagnostics.ProcessStartInfo guard = new System.Diagnostics.ProcessStartInfo(
+                    System.Reflection.Assembly.GetExecutingAssembly().Location,
+                    "--cursor-guard " + System.Diagnostics.Process.GetCurrentProcess().Id);
+                guard.UseShellExecute = false;
+                guard.CreateNoWindow = true;
+                System.Diagnostics.Process.Start(guard);
+            }
+            catch { /* the helper watchdog still covers us */ }
         }
 
         Application.EnableVisualStyles();

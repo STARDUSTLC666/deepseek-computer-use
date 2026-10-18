@@ -111,10 +111,17 @@ Codex 用两层覆盖层告诉用户"AI 正在动你的电脑"，这里做的是
 **Cursor Overlay — 虚拟光标 + 系统光标抑制**
 - 覆盖层存在期间常驻一个带描边和投影的白色指针，启动时落在真实指针位置，
   之后 0.35 缓动滑向每个动作点；背后一层极淡的强调色光晕
-- 默认抑制真实系统光标，退出/Esc/超时用 `SPI_SETCURSORS` 恢复；
-  **被强杀也能恢复**：抑制期间会在 `%LOCALAPPDATA%\dsh-computer-use\cursor-hidden.flag`
-  写上自己的 PID，下一次 helper 请求发现 PID 已失效就立刻还原光标；
-  不想抑制可以设 `DSH_CU_KEEP_CURSOR=1`；
+- 默认抑制真实系统光标（`SetSystemCursor` 换成透明图标），五层恢复保障：
+  1. 正常退出 / Esc / 超时 → 退出钩子里 `SPI_SETCURSORS`
+  2. **独立守卫进程**（`--cursor-guard <ownerPid>`）盯着覆盖层，覆盖层被强杀后
+     它负责还原——和 Codex 的 `system-cursor-manager` 同一思路
+  3. helper 的 **500ms 看门狗**：标记里的 PID 失效就还原，不需要任何请求
+  4. helper **启动即自检**：上次会话残留的标记会被清掉
+  5. 插件 dispose 时发 `restore_cursor` RPC
+- 抑制期间 `%LOCALAPPDATA%\dsh-computer-use\cursor-hidden.flag` 记录自己的 PID，
+  守卫只清理属于自己 owner 的标记，不会误伤新一代覆盖层
+- Windows 在休眠恢复 / 换分辨率后会重置光标，覆盖层每约 1.8 秒**重新抑制**一次
+- 完全不想抑制：`DSH_CU_KEEP_CURSOR=1`
   helper 强杀覆盖层时也会兜底恢复一次
 
 **DPI 关键点**：覆盖层进程必须 Per-Monitor-V2 感知，否则在 150% 缩放屏上
