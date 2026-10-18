@@ -1,5 +1,7 @@
 # deepseek-computer-use
 
+[![npm](https://img.shields.io/npm/v/deepseek-computer-use.svg)](https://www.npmjs.com/package/deepseek-computer-use)
+
 > 社区插件，**非 DeepSeek 官方出品**。官方包在 `@deepseek-ai/*` scope 下。
 
 给 DeepSeek Harness 的 **Windows 桌面控制（Computer Use）** 插件。
@@ -19,12 +21,10 @@ Windows 原生三件套：**UI Automation 观测 + SendInput 注入 + Windows.Gr
 UI Automation、WGC）。
 
 ```bash
-# 发布到 npm 之后
-npm install --save deepseek-computer-use
-
-# 现在还只能用 GitHub 源
-npm install --save github:STARDUSTLC666/deepseek-computer-use
+npm install deepseek-computer-use
 ```
+
+[npmjs.com/package/deepseek-computer-use](https://www.npmjs.com/package/deepseek-computer-use)
 
 然后在本机 profile 的 `cordis.patch.yml` 里启用（详见本文件末尾的配置示例）：
 
