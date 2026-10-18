@@ -19,6 +19,8 @@ public interface IPlatformDriver : IDisposable
     string PlatformName { get; }
     Dictionary<string, object> Ping(Dictionary<string, object> p);
     Dictionary<string, object> Hello(Dictionary<string, object> p);
+    Dictionary<string, object> RestoreCursor(Dictionary<string, object> p);
+    void Maintenance();
     Dictionary<string, object> Close(Dictionary<string, object> p);
     Dictionary<string, object> ListWindows(Dictionary<string, object> p);
     Dictionary<string, object> ListApps(Dictionary<string, object> p);
@@ -383,7 +385,9 @@ public class WindowsDriver : IPlatformDriver
         args.Append(" --hint \"").Append(_overlayHint).Append('"');
         args.Append(" --accent \"").Append(_overlayAccent).Append('"');
         if (_cursorFile != null) args.Append(" --cursor-file \"").Append(_cursorFile).Append('"');
-        if (Environment.GetEnvironmentVariable("DSH_CU_SUPPRESS_CURSOR") == "1") args.Append(" --suppress-cursor");
+        // Suppression is the default (the virtual cursor stands in for the real one);
+        // DSH_CU_KEEP_CURSOR=1 keeps the real pointer visible instead.
+        if (Environment.GetEnvironmentVariable("DSH_CU_KEEP_CURSOR") == "1") args.Append(" --no-suppress-cursor");
         try
         {
             ProcessStartInfo psi = new ProcessStartInfo(exe, args.ToString());
@@ -400,7 +404,8 @@ public class WindowsDriver : IPlatformDriver
         // Kill() skips the overlay's exit handlers, which is where it would restore the
         // system cursors. Restore them from here so a terminated overlay can never leave
         // the user without a pointer.
-        try { SystemParametersInfo(0x0057, 0, IntPtr.Zero, 0); } catch { }
+        RestoreCursors();
+        try { File.Delete(OverlayCursorFlagPath()); } catch { }
         try { if (_overlayCancelFile != null && File.Exists(_overlayCancelFile)) File.Delete(_overlayCancelFile); } catch { }
         _overlay = null;
         _overlayUntil = DateTime.MinValue;
@@ -597,6 +602,43 @@ public class WindowsDriver : IPlatformDriver
         d["ok"] = true;
         d["uia"] = true;
         return d;
+    }
+
+    /// Run cheaply before every request: if a previous overlay died while it was hiding
+    /// the system cursors, put them back. A blank desktop cursor is worse than a stray
+    /// visible one, so this never assumes the overlay cleaned up after itself.
+    public void Maintenance()
+    {
+        try
+        {
+            string flag = OverlayCursorFlagPath();
+            if (!File.Exists(flag)) return;
+            int pid;
+            if (!int.TryParse(File.ReadAllText(flag).Trim(), out pid)) { RestoreCursors(); return; }
+            bool alive;
+            try { Process.GetProcessById(pid); alive = true; } catch { alive = false; }
+            if (!alive) { RestoreCursors(); try { File.Delete(flag); } catch { } }
+        }
+        catch { }
+    }
+
+    static string OverlayCursorFlagPath()
+    {
+        return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "dsh-computer-use", "cursor-hidden.flag");
+    }
+
+    static void RestoreCursors()
+    {
+        try { SystemParametersInfo(0x0057, 0, IntPtr.Zero, 0); } catch { }
+    }
+
+    public Dictionary<string, object> RestoreCursor(Dictionary<string, object> p)
+    {
+        RestoreCursors();
+        try { File.Delete(OverlayCursorFlagPath()); } catch { }
+        Dictionary<string, object> r = new Dictionary<string, object>();
+        r["restored"] = true;
+        return r;
     }
 
     public Dictionary<string, object> Hello(Dictionary<string, object> p)

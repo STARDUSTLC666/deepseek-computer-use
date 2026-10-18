@@ -80,11 +80,25 @@ public static class Native
         try { SetWindowPos(form.Handle, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW); } catch { }
     }
 
+    /// Path of the "cursors are hidden" flag. It carries our PID so a long-lived
+    /// supervisor can tell "the overlay is still hiding them" from "the overlay died
+    /// and left the desktop without a pointer".
+    public static string CursorFlagPath()
+    {
+        string dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "dsh-computer-use");
+        return Path.Combine(dir, "cursor-hidden.flag");
+    }
+
     public static void SuppressSystemCursors(bool suppress)
     {
         try
         {
-            if (!suppress) { SystemParametersInfo(SPI_SETCURSORS, 0, IntPtr.Zero, 0); return; }
+            if (!suppress)
+            {
+                SystemParametersInfo(SPI_SETCURSORS, 0, IntPtr.Zero, 0);
+                try { File.Delete(CursorFlagPath()); } catch { }
+                return;
+            }
             byte[] andMask = new byte[128];
             byte[] xorMask = new byte[128];
             for (int i = 0; i < andMask.Length; i++) andMask[i] = 0xFF;
@@ -93,6 +107,12 @@ public static class Native
             uint[] ids = new uint[] { 32512, 32513, 32514, 32515, 32516, 32631, 32640, 32641, 32642, 32643, 32644, 32645, 32646, 32648, 32649, 32650, 32651, 32671 };
             foreach (uint id in ids) SetSystemCursor(CopyIcon(blank), id);
             DestroyCursor(blank);
+            try
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(CursorFlagPath()));
+                File.WriteAllText(CursorFlagPath(), System.Diagnostics.Process.GetCurrentProcess().Id.ToString());
+            }
+            catch { }
         }
         catch { }
     }

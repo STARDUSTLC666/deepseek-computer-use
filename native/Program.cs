@@ -89,6 +89,7 @@ public static class Program
             // Codex ships the budget with every call (x-oai-cua-request-budget-ms) and the
             // helper honours it; here it bounds capture waits and marks overruns.
             Budget.Begin(Json.GetLong(p, "__budgetMs", 0));
+            try { if (_driver != null) _driver.Maintenance(); } catch { }
             object result = Dispatch(method, p);
             return Ok(id, result);
         }
@@ -109,6 +110,7 @@ public static class Program
         {
             case "ping": return _driver.Ping(p);
             case "hello": return _driver.Hello(p);
+            case "restore_cursor": return _driver.RestoreCursor(p);
             case "close": return _driver.Close(p);
             case "list_windows": return _driver.ListWindows(p);
             case "list_apps": return _driver.ListApps(p);
