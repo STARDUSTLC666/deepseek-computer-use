@@ -1,6 +1,6 @@
 {
   "name": "deepseek-computer-use",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Windows Computer Use for DeepSeek Harness: UIA observation, SendInput actions, Windows.Graphics.Capture — modeled on Codex's window2 API. Community plugin, not an official DeepSeek package.",
   "type": "module",
   "main": "lib/index.js",
