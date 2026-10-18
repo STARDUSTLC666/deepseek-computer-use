@@ -1,16 +1,22 @@
 # deepseek-computer-use
 
+![deepseek-computer-use 大肥鱼桌面控制封面](https://raw.githubusercontent.com/STARDUSTLC666/deepseek-computer-use/main/assets/cover-whale-girl.png)
+
 [![npm](https://img.shields.io/npm/v/deepseek-computer-use.svg)](https://www.npmjs.com/package/deepseek-computer-use)
 
 > 社区插件，**非 DeepSeek 官方出品**。官方包在 `@deepseek-ai/*` scope 下。
 
-给 DeepSeek Harness 的 **Windows 桌面控制（Computer Use）** 插件。
+让 **DeepSeek Harness 操作 Windows 桌面软件**：查看窗口截图、读取界面控件、
+点击按钮、填写表单。适用于没有可用 API、需要直接操作图形界面的任务。
 
-工具面对齐 Codex 的 window2 API（`list_apps` / `list_windows` / `get_window` /
-`launch_app` / `get_window_state` / `click` / `press_key` / `type_text` / `scroll` /
-`set_value` / `drag` / `perform_secondary_action` / `activate_window` /
-`start_audio_recording` / `stop_audio_recording` / `computer_use_health`），底层是
-Windows 原生三件套：**UI Automation 观测 + SendInput 注入 + Windows.Graphics.Capture 抓屏**。
+提供 16 个工具，覆盖窗口发现、截图观测、鼠标键盘、控件操作和可选的系统音频录制。
+支持会话独立授权、敏感操作审批与审计；取消或回合结束时停止原生助手，
+操作失败后要求重新观察，减少结果不明时的重复操作。
+
+底层采用 **UI Automation + SendInput + Windows.Graphics.Capture**，
+工具语义参考 Codex window2，并针对 DSH 的会话、审批和截图附件机制适配。
+
+欢迎使用，遇到问题或有改进建议，请提交 [issues](https://github.com/STARDUSTLC666/deepseek-computer-use/issues) 和 [PR](https://github.com/STARDUSTLC666/deepseek-computer-use/pulls)。
 
 零 npm 原生依赖、零 .NET 运行时依赖：helper 和覆盖层用系统自带的 `csc.exe` 现编，
 抓屏（WGC）和录音（WASAPI）是 net48 程序，Windows 10/11 自带运行时。

@@ -1,7 +1,7 @@
 {
   "name": "deepseek-computer-use",
   "version": "0.1.2",
-  "description": "Windows Computer Use for DeepSeek Harness: UIA observation, SendInput actions, Windows.Graphics.Capture — modeled on Codex's window2 API. Community plugin, not an official DeepSeek package.",
+  "description": "在 DSH 中查看和操作 Windows 桌面软件，支持窗口截图、鼠标键盘与控件操作。 欢迎提交 issues 和 PR。",
   "type": "module",
   "main": "lib/index.js",
   "exports": {
@@ -20,6 +20,7 @@
     "native/wgcfw/Capture.csproj",
     "native/wgcfw/Program.cs",
     "skills",
+    "assets/cover-whale-girl.png",
     "cordis.patch.yml",
     "README.md",
     "CHANGELOG.md",
