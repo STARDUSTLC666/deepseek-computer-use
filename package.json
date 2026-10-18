@@ -1,7 +1,7 @@
 {
-  "name": "@stardustlc666/dsh-computer-use-windows",
+  "name": "deepseek-computer-use",
   "version": "0.1.0",
-  "description": "Windows Computer Use for DeepSeek Harness: UIA observation, SendInput actions, occlusion-free window capture — modeled on Codex's window2 API and adapted to DSH.",
+  "description": "Windows Computer Use for DeepSeek Harness: UIA observation, SendInput actions, Windows.Graphics.Capture — modeled on Codex's window2 API. Community plugin, not an official DeepSeek package.",
   "type": "module",
   "main": "lib/index.js",
   "exports": {
@@ -53,11 +53,11 @@
   "author": "STARDUSTLC666",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/STARDUSTLC666/dsh-computer-use-windows.git"
+    "url": "git+https://github.com/STARDUSTLC666/deepseek-computer-use.git"
   },
-  "homepage": "https://github.com/STARDUSTLC666/dsh-computer-use-windows#readme",
+  "homepage": "https://github.com/STARDUSTLC666/deepseek-computer-use#readme",
   "bugs": {
-    "url": "https://github.com/STARDUSTLC666/dsh-computer-use-windows/issues"
+    "url": "https://github.com/STARDUSTLC666/deepseek-computer-use/issues"
   },
   "os": [
     "win32"

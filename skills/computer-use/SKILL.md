@@ -5,7 +5,7 @@ description: Drive Windows desktop apps through DSH Computer Use tools (UIA obse
 
 # Computer Use (Windows)
 
-The `@stardustlc666/dsh-computer-use-windows` plugin exposes the Codex window2 API on Windows.
+The `deepseek-computer-use` plugin exposes the Codex window2 API on Windows.
 Prefer shell, files and web tools whenever they can do the job: GUI automation is
 the slowest, most fragile option and it moves the user's real mouse and keyboard.
 

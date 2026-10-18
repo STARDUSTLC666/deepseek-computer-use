@@ -1,10 +1,13 @@
-# @stardustlc666/dsh-computer-use-windows
+# deepseek-computer-use
+
+> 社区插件，**非 DeepSeek 官方出品**。官方包在 `@deepseek-ai/*` scope 下。
 
 给 DeepSeek Harness 的 **Windows 桌面控制（Computer Use）** 插件。
 
-工具面照着 Codex 的 window2 API 一比一实现（`list_apps` / `list_windows` / `get_window` /
+工具面对齐 Codex 的 window2 API（`list_apps` / `list_windows` / `get_window` /
 `launch_app` / `get_window_state` / `click` / `press_key` / `type_text` / `scroll` /
-`set_value` / `drag` / `perform_secondary_action` / `activate_window`），底层换成
+`set_value` / `drag` / `perform_secondary_action` / `activate_window` /
+`start_audio_recording` / `stop_audio_recording` / `computer_use_health`），底层是
 Windows 原生三件套：**UI Automation 观测 + SendInput 注入 + Windows.Graphics.Capture 抓屏**。
 
 零 npm 原生依赖、零 .NET 运行时依赖：helper 和覆盖层用系统自带的 `csc.exe` 现编，
@@ -16,16 +19,19 @@ Windows 原生三件套：**UI Automation 观测 + SendInput 注入 + Windows.Gr
 UI Automation、WGC）。
 
 ```bash
-# 从 GitHub 安装（尚未发布到 npm）
-npm install --save @stardustlc666/dsh-computer-use-windows
+# 发布到 npm 之后
+npm install --save deepseek-computer-use
+
+# 现在还只能用 GitHub 源
+npm install --save github:STARDUSTLC666/deepseek-computer-use
 ```
 
 然后在本机 profile 的 `cordis.patch.yml` 里启用（详见本文件末尾的配置示例）：
 
 ```yaml
 - insert:
-    - id: @stardustlc666/dsh-computer-use-windows
-      name: '@stardustlc666/dsh-computer-use-windows'
+    - id: deepseek-computer-use
+      name: 'deepseek-computer-use'
 ```
 
 首次调用任意 Computer Use 工具时会自动编译 helper 与覆盖层（约 1 秒）。
@@ -150,7 +156,7 @@ cd "E:\path\to\dsh-computer-use"
 ## 配置
 
 ```yaml
-- id: @stardustlc666/dsh-computer-use-windows
+- id: deepseek-computer-use
   config:
     approval: sensitive            # never | sensitive | always
     allowApps: ["notepad", "chrome"]   # 空 = 不限制
@@ -275,8 +281,8 @@ marker 文件按 **会话 + turn** 命名，避免旧会话的 Esc 标记误伤�
 
 ```yaml
 - insert:
-    - id: @stardustlc666/dsh-computer-use-windows
-      name: '@stardustlc666/dsh-computer-use-windows'
+    - id: deepseek-computer-use
+      name: 'deepseek-computer-use'
       config:
         approval: sensitive     # never | sensitive | always
         appConsent: session     # 每个应用问一次；never 表示不问
