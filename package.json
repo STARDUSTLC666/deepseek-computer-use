@@ -1,13 +1,14 @@
 {
   "name": "deepseek-computer-use",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "description": "在 DSH 中查看和操作 Windows 桌面软件，支持窗口截图、鼠标键盘与控件操作。 欢迎提交 issues 和 PR。",
   "type": "module",
   "main": "lib/index.js",
   "exports": {
     ".": "./lib/index.js",
     "./cordis.patch.yml": "./cordis.patch.yml",
-    "./package.json": "./package.json"
+    "./package.json": "./package.json",
+    "./client": "./lib/update-client.js"
   },
   "files": [
     "lib",
@@ -27,9 +28,9 @@
     "LICENSE"
   ],
   "scripts": {
-    "build": "node lib/build.mjs",
+    "build": "node lib/build.mjs && node scripts/build-updates.mjs",
     "build:helper": "node lib/build.mjs",
-    "test": "node --test test/contracts.test.mjs test/bridge.test.mjs && node test/integration.mjs",
+    "test": "node scripts/build-updates.mjs && node --test test/contracts.test.mjs test/bridge.test.mjs && node test/integration.mjs",
     "test:contracts": "node --test test/contracts.test.mjs test/bridge.test.mjs",
     "test:harness": "node test/harness.mjs",
     "test:all": "npm test && node test/parity.mjs && node test/parity-js.mjs"
@@ -37,10 +38,19 @@
   "dsh": {
     "bundle": {
       "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-settings",
+        "@deepseek-ai/dsh-client-ui-layout",
+        "@deepseek-ai/dsh-client-ui-sidebar"
+      ]
     }
   },
   "engines": {
-    "node": ">=18.17"
+    "node": "^22.19.0 || >=24.0.0",
+    "dsh": ">=0.2.1-rc.3"
   },
   "keywords": [
     "dsh",
@@ -68,5 +78,9 @@
   ],
   "publishConfig": {
     "access": "public"
-  }
+  },
+  "dependencies": {
+    "@stardustlc/dsh-updates": "0.1.0"
+  },
+  "packageManager": "pnpm@11.7.0"
 }

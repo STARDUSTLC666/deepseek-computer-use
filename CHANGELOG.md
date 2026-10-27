@@ -1,5 +1,11 @@
 # 更新记录
 
+## 0.2.0 (2026-10-26)
+
+- Add this plugin’s own update controls and independent preferences. Automatic installation stays off until explicitly enabled.
+- Confirm manual installs, preserve local sources and disabled state, pause for tasks or unsaved changes, and use native DSH recovery without forced restarts.
+- Require the public DSH 0.2.1-rc.3 update APIs; Suite components remain managed through Suite.
+
 ## 0.1.2 — 2026-10-18
 
 - 适配真实 DeepSeek Harness：标准 JSON Schema 参数、模型可见的截图附件、审批审计，
