@@ -1,5 +1,10 @@
 # 更新记录
 
+## 0.2.1 (2026-10-27)
+
+- Refresh shared update controls for independent and Suite installations, with explicit whole-bundle scope.
+- Keep automatic installation off by default and preserve independent installation behavior.
+
 ## 0.2.0 (2026-10-26)
 
 - Add this plugin’s own update controls and independent preferences. Automatic installation stays off until explicitly enabled.

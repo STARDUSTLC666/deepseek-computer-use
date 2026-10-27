@@ -1,6 +1,6 @@
 {
   "name": "deepseek-computer-use",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "在 DSH 中查看和操作 Windows 桌面软件，支持窗口截图、鼠标键盘与控件操作。 欢迎提交 issues 和 PR。",
   "type": "module",
   "main": "lib/index.js",
@@ -80,7 +80,7 @@
     "access": "public"
   },
   "dependencies": {
-    "@stardustlc/dsh-updates": "0.1.0"
+    "@stardustlc/dsh-updates": "0.1.1"
   },
   "packageManager": "pnpm@11.7.0"
 }
