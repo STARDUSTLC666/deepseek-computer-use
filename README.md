@@ -1,16 +1,17 @@
 # deepseek-computer-use
 
+[English](README.en.md)
+
 ![deepseek-computer-use 大肥鱼桌面控制封面](https://raw.githubusercontent.com/STARDUSTLC666/deepseek-computer-use/main/assets/cover-whale-girl.png)
 
 [![npm](https://img.shields.io/npm/v/deepseek-computer-use.svg)](https://www.npmjs.com/package/deepseek-computer-use)
 [![Windows 10/11](https://img.shields.io/badge/platform-Windows%2010%2F11-0078D4.svg)](#安装)
-[![Node.js ≥18.17](https://img.shields.io/badge/node-%3E%3D18.17-339933.svg)](package.json)
+[![Node.js 22.19+ / 24+](https://img.shields.io/badge/node-22.19%2B%20%2F%2024%2B-339933.svg)](package.json)
 [![MIT License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
 > 社区插件，**非 DeepSeek 官方出品**。官方包在 `@deepseek-ai/*` scope 下。
 
-让 **DeepSeek Harness 操作 Windows 桌面软件**：查看窗口截图、读取界面控件、
-点击按钮、填写表单。适用于没有可用 API、需要直接操作图形界面的任务。
+让 DeepSeek Harness 操作 Windows 桌面软件：发现窗口、查看截图和界面控件，再执行鼠标键盘操作。适合没有可用 API 的图形界面任务；提供会话应用授权、敏感操作确认与审计。
 
 提供 16 个工具，覆盖窗口发现、截图观测、鼠标键盘、控件操作和可选的系统音频录制。
 支持会话独立授权、敏感操作审批与审计；取消或回合结束时停止原生助手，
@@ -308,7 +309,6 @@ node test/integration.mjs
 
 MIT。第三方商用前请自行做安全评审：这个插件能让模型操作你的桌面。
 
-
 ## 原生载荷（native/bin）
 
 | 文件 | 用途 | 大小 |
@@ -337,7 +337,6 @@ MIT。第三方商用前请自行做安全评审：这个插件能让模型操�
 | App 字段 | `isRunning` + `lastUsedDate`（进程启动时间）；`useCount` 无数据来源，按 Codex 的可选字段处理，不伪造 |
 
 marker 文件按 **会话 + turn** 命名，避免旧会话的 Esc 标记误伤新会话。
-
 
 ## 配置示例
 
