@@ -2,6 +2,10 @@
 
 [English](README.en.md)
 
+[![downloads](https://raw.githubusercontent.com/STARDUSTLC666/dsh-suite/npm-downloads/assets/dsh-computer-use-downloads.svg)](https://www.npmjs.com/package/deepseek-computer-use) [![total downloads](https://raw.githubusercontent.com/STARDUSTLC666/dsh-suite/npm-downloads/assets/dsh-computer-use-total-downloads.svg)](https://www.npmjs.com/package/deepseek-computer-use)
+
+[下载统计说明](https://github.com/STARDUSTLC666/dsh-suite/blob/npm-downloads/README.md)
+
 ![deepseek-computer-use 大肥鱼桌面控制封面](https://raw.githubusercontent.com/STARDUSTLC666/deepseek-computer-use/main/assets/cover-whale-girl.png)
 
 [![npm](https://img.shields.io/npm/v/deepseek-computer-use.svg)](https://www.npmjs.com/package/deepseek-computer-use)
@@ -25,9 +29,28 @@
 零 npm 原生依赖、零 .NET 运行时依赖：helper 和覆盖层用系统自带的 `csc.exe` 现编，
 抓屏（WGC）和录音（WASAPI）是 net48 程序，Windows 10/11 自带运行时。
 
+## 开始使用
+
+1. 在 Windows 10/11 的实际 DSH profile 中安装 deepseek-computer-use，然后创建新会话。
+2. 打开目标软件，并在对话中说明要操作的应用、目标和允许范围。
+3. 按提示批准会话应用授权；先让助手查看窗口截图或界面控件，再执行点击和输入。
+4. 敏感操作先核对审批内容；失败或结果不明确时重新观察，避免重复提交。
+5. 检查软件中的实际结果；需要中断时取消当前任务，插件会停止本次原生助手。
+
 ## 安装
 
-要求：**Windows 10/11**、**Node ≥ 18.17**。其余都是系统组件（.NET Framework 4.8、
+要求 Windows 10/11、Node.js 22.19+ / 24+。推荐从 DSH 原生插件管理按 `deepseek-computer-use` 安装，或运行：
+
+```bash
+dsh plugin --profile desktop add deepseek-computer-use
+```
+
+网页版把 `desktop` 改为 `web`。完成后重启实际使用的 profile，再新建会话。下面的手动配置用于源码开发，普通安装无需重复修改配置。
+
+<details>
+<summary>源码开发与可选抓屏 / 录音组件</summary>
+
+要求：**Windows 10/11**、**Node.js 22.19+ / 24+**。其余都是系统组件（.NET Framework 4.8、
 UI Automation、WGC）。
 
 ```bash
@@ -52,6 +75,8 @@ npm run build          # helper + overlay（csc），再尝试 dotnet 编 captur
 ```
 
 没有 .NET SDK 也能用：抓屏自动退回 PrintWindow，录音会明确报 `audio_missing`。
+
+</details>
 
 ## 自检
 

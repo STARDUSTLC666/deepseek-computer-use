@@ -2,9 +2,21 @@
 
 [中文](README.md)
 
+[![downloads](https://raw.githubusercontent.com/STARDUSTLC666/dsh-suite/npm-downloads/assets/dsh-computer-use-downloads.svg)](https://www.npmjs.com/package/deepseek-computer-use) [![total downloads](https://raw.githubusercontent.com/STARDUSTLC666/dsh-suite/npm-downloads/assets/dsh-computer-use-total-downloads.svg)](https://www.npmjs.com/package/deepseek-computer-use)
+
+[Download statistics](https://github.com/STARDUSTLC666/dsh-suite/blob/npm-downloads/README.md)
+
 Let DeepSeek Harness operate Windows desktop apps: discover windows, inspect screenshots and UI controls, then use mouse and keyboard actions. Designed for GUI tasks without a suitable API, with per-session app consent, sensitive-action confirmation and audit records.
 
 Community plugin, not an official DeepSeek product.
+
+## Start using it
+
+1. Install deepseek-computer-use in your Windows 10/11 DSH profile, then start a new session.
+2. Open the target application and describe the app, goal and allowed scope in the conversation.
+3. Approve the session application access when prompted; inspect the window or controls before clicking and typing.
+4. Review approval details for sensitive actions; re-observe after failures or uncertain results instead of submitting twice.
+5. Check the result in the application. Cancel the task to stop its native helper when needed.
 
 ## Install
 
