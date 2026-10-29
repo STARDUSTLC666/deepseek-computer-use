@@ -1,7 +1,7 @@
 {
   "name": "deepseek-computer-use",
-  "version": "0.2.3",
-  "description": "在 DSH 中查看和操作 Windows 桌面软件，支持窗口截图、鼠标键盘与控件操作。 欢迎提交 issues 和 PR。",
+  "version": "0.2.4",
+  "description": "DSH 社区 Windows 桌面插件：窗口截图、界面控件、鼠标键盘、会话授权与操作审计。欢迎提交 issues 和 PR。",
   "type": "module",
   "main": "lib/index.js",
   "exports": {
@@ -25,7 +25,8 @@
     "cordis.patch.yml",
     "README.md",
     "CHANGELOG.md",
-    "LICENSE"
+    "LICENSE",
+    "README.en.md"
   ],
   "scripts": {
     "build": "node lib/build.mjs && node scripts/build-updates.mjs",
