@@ -1,14 +1,35 @@
-# deepseek-computer-use
+[简体中文](README.md) · **English**
 
-[中文](README.md)
+# Computer Use
+
+**Let DSH work with Windows apps within your approval.**
 
 [![downloads](https://raw.githubusercontent.com/STARDUSTLC666/dsh-suite/npm-downloads/assets/dsh-computer-use-downloads.svg)](https://www.npmjs.com/package/deepseek-computer-use) [![total downloads](https://raw.githubusercontent.com/STARDUSTLC666/dsh-suite/npm-downloads/assets/dsh-computer-use-total-downloads.svg)](https://www.npmjs.com/package/deepseek-computer-use)
 
-[Download statistics](https://github.com/STARDUSTLC666/dsh-suite/blob/npm-downloads/README.md)
+**[Install](#install) · [Workflow](#start-using-it) · [Full guide](https://github.com/STARDUSTLC666/deepseek-computer-use/blob/main/docs/REFERENCE.en.md)**
 
-Let DeepSeek Harness operate Windows desktop apps: discover windows, inspect screenshots and UI controls, then use mouse and keyboard actions. Designed for GUI tasks without a suitable API, with per-session app consent, sensitive-action confirmation and audit records.
+<picture>
+  <source media="(prefers-color-scheme: dark) and (max-width: 640px)" srcset="https://raw.githubusercontent.com/STARDUSTLC666/deepseek-computer-use/main/docs/assets/intro/workflow-en-mobile-dark.svg">
+  <source media="(max-width: 640px)" srcset="https://raw.githubusercontent.com/STARDUSTLC666/deepseek-computer-use/main/docs/assets/intro/workflow-en-mobile-light.svg">
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/STARDUSTLC666/deepseek-computer-use/main/docs/assets/intro/workflow-en-dark.svg">
+  <img src="https://raw.githubusercontent.com/STARDUSTLC666/deepseek-computer-use/main/docs/assets/intro/workflow-en-light.svg" alt="Let DSH work with Windows apps within your approval. · workflow illustration" width="100%">
+</picture>
 
-Community plugin, not an official DeepSeek product.
+## Features
+
+- Inspect a screenshot or UI controls before the next step.
+- Limit actions through session-level application approval.
+- Check the result and keep audit and cancellation controls.
+
+## Install
+
+Open **Plugins** in the DSH desktop app and install `deepseek-computer-use`. If the CLI is available:
+
+```bash
+dsh plugin --profile desktop add deepseek-computer-use
+```
+
+For the web profile, replace `desktop` with `web`. Restart that DSH profile after installation. The package’s DSH requirement is `>=0.2.1-rc.3`.
 
 ## Start using it
 
@@ -18,32 +39,33 @@ Community plugin, not an official DeepSeek product.
 4. Review approval details for sensitive actions; re-observe after failures or uncertain results instead of submitting twice.
 5. Check the result in the application. Cancel the task to stop its native helper when needed.
 
-## Install
+Example request：
 
-Requires Windows 10/11, Node.js 22.19+ (22.x) or 24+, and DSH 0.2.1-rc.3 or newer. In Desktop, install the package below from the native Plugins panel. For Web:
+> Inspect the target app window and controls, then explain the next step without clicking or typing.
 
-```bash
-dsh plugin --profile web add deepseek-computer-use
-```
+## Before you start
 
-Restart the host after installation. This package operates the Windows computer running DSH; a remote browser does not move execution to the viewer's computer.
+For Windows 10/11. Permissions, control support and the desktop environment affect what can be automated.
 
-## Use
+Configuration, detailed tools and troubleshooting: [full reference](https://github.com/STARDUSTLC666/deepseek-computer-use/blob/main/docs/REFERENCE.en.md).
 
-Start a task that needs a desktop app. Observe the window and controls before acting, and grant access to the intended app for the session. The 16 tools cover window discovery, screenshots, mouse and keyboard, UI Automation controls and optional system audio recording.
+## Plugin updates
 
-The native helper uses Windows UI Automation, SendInput and Windows.Graphics.Capture. Cancellation or the end of a turn stops its helper; failed actions require a fresh observation before retrying. Approval-required operations refuse when the host cannot ask. This is not an operating-system sandbox for untrusted applications.
+Check updates at the bottom of the workbench or native plugin details. Automatic checks are on by default; **automatic installation is off**. You choose whether to install and when to restart. Suite-managed components update with their bundle. [Update behavior](https://github.com/STARDUSTLC666/deepseek-computer-use/blob/main/docs/REFERENCE.en.md).
 
-## Updates
+## Documentation
 
-Version controls are at the bottom of native plugin details. Automatic checks are on; automatic installation is off by default. Installation, deferral and update preferences remain user choices. The plugin does not force a DSH restart.
+- [Full usage, configuration and limits](https://github.com/STARDUSTLC666/deepseek-computer-use/blob/main/docs/REFERENCE.en.md)
+- [Release notes](https://github.com/STARDUSTLC666/deepseek-computer-use/blob/main/CHANGELOG.md)
 
-## Documentation and feedback
+## Feedback and contributions
 
-See the [Chinese guide](README.md) for the complete tool list, configuration, native payload requirements and platform limitations, and the [changelog](CHANGELOG.md) for releases.
-
-Feedback and contributions are welcome: report [issues](https://github.com/STARDUSTLC666/deepseek-computer-use/issues) or submit [pull requests](https://github.com/STARDUSTLC666/deepseek-computer-use/pulls). Include versions, expected and actual behavior, and redact private screenshots or credentials.
+If the plugin helps, a Star makes it easier for others to discover. Report problems or suggest improvements in [Issues](https://github.com/STARDUSTLC666/deepseek-computer-use/issues); code and documentation [PRs](https://github.com/STARDUSTLC666/deepseek-computer-use/pulls) are welcome. Include versions and reproduction steps, and remove credentials from reports.
 
 ## License
 
-[MIT](LICENSE).
+[MIT](https://github.com/STARDUSTLC666/deepseek-computer-use/blob/main/LICENSE)
+
+<a id="use"></a>
+<a id="updates"></a>
+<a id="documentation-and-feedback"></a>

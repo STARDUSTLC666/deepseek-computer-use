@@ -1,7 +1,7 @@
 {
   "name": "deepseek-computer-use",
-  "version": "0.2.6",
-  "description": "DSH 社区 Windows 桌面插件：窗口截图、界面控件、鼠标键盘、会话授权与操作审计。欢迎提交 issues 和 PR。",
+  "version": "0.2.7",
+  "description": "让 DSH 在授权范围内操作 Windows 应用。 面向 Windows 10/11 欢迎提交 issues 和 PR。",
   "type": "module",
   "main": "lib/index.js",
   "exports": {
@@ -27,7 +27,10 @@
     "CHANGELOG.md",
     "LICENSE",
     "README.en.md",
-    "assets/plugin-icon.webp"
+    "assets/plugin-icon.webp",
+    "docs/assets/intro",
+    "docs/REFERENCE.zh.md",
+    "docs/REFERENCE.en.md"
   ],
   "scripts": {
     "build": "node lib/build.mjs && node scripts/build-updates.mjs",
