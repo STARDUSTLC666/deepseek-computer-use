@@ -1,5 +1,14 @@
 # 更新记录
 
+## 未发布
+
+- 文档整理：删除重复且过时的「安装」小节，安装路径只保留原生插件管理 + 重启 + `computer_use_health` 自检。
+- 「配置」改为完整选项表（含 `appConsent`、`redactApps`、`riskyPattern`、`launchTimeoutMs` 等），删掉第二份不完整的配置示例。
+- 「安全模型」补齐实际闸门顺序：硬拒绝 → 可达性 → 应用授权 → 动作审批 → `redactApps` → 前台证明 → 快照 TTL。
+- 新增「失败与恢复」错误码表（18 行），说明每个失败该由用户还是助手处理；合并重复的「已知限制 / 已知边界」。
+- 中英文 README 都指向随包技能 `computer-use-windows`，作为助手侧的操作与失败处置手册。
+- Documentation pass: remove the duplicated installation section, publish one complete configuration table, document the real safety-gate order, merge the duplicated limitation sections, and add an error-code recovery table plus the bundled skill reference.
+
 ## 0.2.6 (2026-10-30)
 
 - 原生插件列表与详情新增专门生成的鲸鱼娘图标：大头像、独立功能符号、透明留白，适合 30 / 36 px 显示；原封面保留。

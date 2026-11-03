@@ -37,6 +37,11 @@
 4. 敏感操作先核对审批内容；失败或结果不明确时重新观察，避免重复提交。
 5. 检查软件中的实际结果；需要中断时取消当前任务，插件会停止本次原生助手。
 
+插件自带 `computer-use-windows` 技能：需要操作桌面时助手会加载它，里面写着观测节奏、
+动作选择与失败处置。任务复杂或反复失败时，可以让助手先加载这个技能再动手。
+
+常用入口：[安装](#安装) · [安全模型](#安全模型) · [失败与恢复](#失败与恢复) · [配置](#配置) · [工具](#工具) · [已知限制](#已知限制) · [插件更新](#插件更新)
+
 ## 安装
 
 要求 Windows 10/11、Node.js 22.19+ / 24+。推荐从 DSH 原生插件管理按 `deepseek-computer-use` 安装，或运行：
@@ -45,7 +50,7 @@
 dsh plugin --profile desktop add deepseek-computer-use
 ```
 
-网页版把 `desktop` 改为 `web`。完成后重启实际使用的 profile，再新建会话。下面的手动配置用于源码开发，普通安装无需重复修改配置。
+网页版把 `desktop` 改为 `web`。完成后重启实际使用的 profile，再新建会话，让助手调用 `computer_use_health` 自检（helper、编译器、策略与当前窗口数）。第一次调用任意 Computer Use 工具时会自动编译原生 helper。下面的手动配置用于源码开发，普通安装无需重复修改配置。
 
 <details>
 <summary>源码开发与可选抓屏 / 录音组件</summary>
@@ -58,6 +63,12 @@ npm install deepseek-computer-use
 ```
 
 [npmjs.com/package/deepseek-computer-use](https://www.npmjs.com/package/deepseek-computer-use)
+
+插件通过 `package.json` 声明自己，宿主据此把它列进插件列表：
+
+```json
+{ "dsh": { "bundle": { "patch": "./cordis.patch.yml" } } }
+```
 
 然后在本机 profile 的 `cordis.patch.yml` 里启用（详见本文件末尾的配置示例）：
 
@@ -203,53 +214,96 @@ Codex 用两层覆盖层告诉用户"AI 正在动你的电脑"，这里做的是
 
 ## 安全模型
 
-1. **可达性**：`allowApps` / `denyApps` 决定这个插件能不能碰某个应用；空数组 = 不限制。
-2. **确认**：`approval` 三档
+动作按下列顺序过闸，前一道拒绝就不会进入下一道（`lib/safety.js`）。
+
+1. **硬拒绝（不可审批覆盖）**：终端与 shell（Windows Terminal、cmd、PowerShell、WSL、mintty）、
+   Run 对话框、密码管理器与凭据界面、安全软件、UAC 与认证对话框、DSH 自身和同类助手应用，
+   以及 Windows / Meta / Super 键系的任何组合。命中返回 `hard_denied`。
+2. **可达性**：`allowApps` / `denyApps` 决定这个插件能不能碰某个应用；空数组 = 不限制。
+   命中分别返回 `app_not_allowed` / `app_denied`。
+3. **应用授权 `appConsent`**：默认 `session`，每个会话对每个应用问一次；批准后由 helper 强制，
+   未批准的应用直接 `app_not_approved`。设成 `never` 表示不问。
+4. **动作确认 `approval`** 三档
    - `never`：从不询问（自担风险）
    - `sensitive`（默认）：目标元素标签命中危险词（delete/删除/卸载/支付/提交/安装…）才问；
      `launch_app` 总是问
    - `always`：每次动作都问
-   审批走 DSH 自己的 approval seam；**没有审批服务时直接拒绝**，绝不静默降级。
-   DSH 宿主的 `approval` 策略 `never` 表示拒绝需要审批的请求，与本插件配置项的
-   `approval: never`（跳过动作级询问）含义不同。应用授权仍由 `appConsent` 单独控制。
-3. **前台证明**：打字、按键、坐标点击、滚动必须先证明目标窗口真的拿到了前台，
+   审批走 DSH 自己的 approval seam；**没有审批服务时直接拒绝**（`approval_unavailable`），
+   绝不静默降级。DSH 宿主的 `approval` 策略 `never` 表示拒绝需要审批的请求，与本插件
+   配置项的 `approval: never`（跳过动作级询问）含义不同。应用授权仍由 `appConsent` 单独控制。
+5. **隐私 `redactApps`**：列出的应用截图永不出本机。它在**插件层**执行，直接调用 helper 的
+   RPC 不受它约束，因此不要把 helper 单独暴露给非受信调用方。
+6. **前台证明**：打字、按键、坐标点击、滚动必须先证明目标窗口真的拿到了前台，
    否则抛 `focus_failed` 并告诉你当前是谁占着前台。SendInput 会打到有焦点的窗口，
-   这一步省不得。
-4. **快照 TTL**：元素编号默认 120 秒过期，过期必须重新观测，避免"拿旧编号点新界面"。
-5. **`dryRun`**：只回放动作不注入，用于集成演练。
+   这一步省不得（`set_value`、Invoke 点击这类语义动作不需要前台）。
+7. **快照 TTL**：元素编号默认 120 秒过期，过期必须重新观测，避免"拿旧编号点新界面"。
+8. **`dryRun`**：只回放动作不注入，用于集成演练。
 
-## 安装
+上述 `hard_denied` 之外的拒绝都可以通过配置或审批放开；硬拒绝不行——这不是可选项，
+也不要为绕过它去换工具。
 
-```powershell
-# 1. 放进 DSH 的 profile
-cd "E:\path\to\dsh-computer-use"
-# 方式 A：本地目录挂载（把本目录链进 profile 的 node_modules）
-# 方式 B：npm pack 后用宿主插件管理器安装
-```
+## 失败与恢复
 
-插件通过 `package.json` 的 `dsh.bundle.patch` 声明自己：
+插件不会自动重试结果不明的输入：失败后先重新观测，再决定下一步。排查顺序是先跑
+`computer_use_health`（helper、编译器、策略、窗口数），再按返回的错误码处理：
 
-```json
-{ "dsh": { "bundle": { "patch": "./cordis.patch.yml" } } }
-```
+| 错误码 | 含义 | 怎么办 |
+|---|---|---|
+| `hard_denied` | 目标是终端、Run 对话框、凭据界面、安全软件、认证对话框或 DSH 自身；或按了 Win / Meta 键 | 硬拒绝不可审批覆盖。改用 Shell 或文件工具，或由你手动完成这一步 |
+| `app_not_allowed` | 目标应用不在 `allowApps` 内 | 在插件配置里加入该应用，或清空 `allowApps` |
+| `app_denied` | 目标应用命中 `denyApps` | 从 `denyApps` 移除后新建会话 |
+| `app_not_approved` | 本会话还没批准这个应用 | 重新发起任务，在审批提示里批准该应用；会话级授权不跨会话沿用 |
+| `approval_unavailable` | 动作需要确认，但当前会话没有审批服务 | 换用带审批的权限预设，或调整插件 `approval`（自担风险） |
+| `approval_denied` | 你在审批里拒绝了这次动作 | 需要时重发同一个动作并批准 |
+| `focus_failed` | 目标窗口没拿到前台（被置顶工具或提权窗口占住） | 关掉抢焦点的工具；语义动作（`set_value`、Invoke 点击、Expand）不需要前台 |
+| `window_minimized` | 窗口已最小化，没有可观测内容 | 先 `activate_window` 恢复，再 `get_window_state` |
+| `window_gone` / `window_not_visible` | 应用已关闭、句柄变化或窗口不显示 | 重新 `list_windows` 选目标 |
+| `stale_screenshot` / `stale_snapshot` | 截图或元素编号过期（受 `snapshotTtlMs` 限制） | 重新观测后再动作，不要复用旧编号或旧坐标 |
+| `fresh_observation_required` | 上一次输入或抓屏失败，缓存已清空 | 重新观测；不要重复结果不明的点击或输入 |
+| `cancelled_by_user` / `turn_stopped` | 你按了 Esc 取消；同一回合内后续调用直接失败 | 需要继续时在新回合重新开始 |
+| `turn_ended` | 发起动作的回合已结束 | 在新回合继续 |
+| `timeout` | 该次原生请求超出预算（`timeoutMs`），旧 helper 已被停止 | 重新观测后再试，不要重放结果不明的输入 |
+| `protocol_mismatch` | 自定义 `helperPath` 的协议版本不匹配 | 用当前版本重新编译 helper（`npm run build`），或去掉自定义路径 |
+| `audio_missing` | 录音组件（audio helper）未构建 | 运行 `npm run build` 后重试；不需要录音就保持 `audio: false` |
+| `audio_not_enabled` | 还没批准「computer-audio」录音授权，或没有 `DSH_CU_AUDIO=1` | 在审批提示里允许录音；插件侧还需要 `audio: true` 并重启宿主 |
+| `audio_not_recorded` / `audio_running` | 录到 0 个采样，或上一次录音还没停 | 确认系统正在输出声音；先 `stop_audio_recording` 再重新开始 |
+| `invalid_arguments` | 工具参数不合法（例如 `scroll` 缺 `x` / `y`） | 让助手按工具 schema 重新给参数 |
 
-`cordis.patch.yml` 负责往宿主配置里插插件行。装好后重启宿主，让模型调
-`computer_use_health` 自检；第一次调用会自动编译 helper（约 1-2 秒）。
+助手侧的处置手册在随包技能 `computer-use-windows` 里，覆盖观测节奏、动作选择和失败应对；
+需要提高成功率时可以让助手先加载这个技能。
 
 ## 配置
+
+所有字段都有安全默认值：空配置也能启动，不会碰鼠标、键盘或网络。下表是完整选项，可在 profile 的 `cordis.patch.yml` 里按需覆盖：
+
+| 配置 | 默认 | 说明 |
+|---|---|---|
+| `approval` | `sensitive` | `never` 从不询问；`sensitive` 只在目标标签像不可逆操作时问，`launch_app` 总是问；`always` 每次动作都问 |
+| `appConsent` | `session` | 每个会话对每个应用授权一次；`never` 表示不问。授权由 helper 强制 |
+| `allowApps` | `[]` | 只允许这些应用（exe 路径/进程名子串）；空 = 不限制 |
+| `denyApps` | `[]` | 永远拒绝这些应用，优先于 `allowApps` |
+| `redactApps` | `[]` | 这些应用的截图永不出本机（隐私保护，只在插件层生效） |
+| `riskyPattern` | 内置危险词正则 | 自定义「危险动作」判定，命中走审批 |
+| `audio` | `false` | 开启 WASAPI 环回录音与 `start/stop_audio_recording` |
+| `defaultIncludeScreenshot` | `true` | `get_window_state` 默认抓图 |
+| `maxElements` | `260` | 无障碍树最多返回多少个元素（20–2000） |
+| `snapshotTtlMs` | `120000` | 元素编号与快照有效期（1 秒–1 小时） |
+| `settleMs` | `1000` | 动作后等待界面稳定的时间 |
+| `timeoutMs` / `launchTimeoutMs` | `10000` / `15000` | 单次 RPC 预算；`launch_app` 用后者 |
+| `dryRun` | `false` | 只回放动作不注入，用于集成演练 |
+| `toolPrefix` | `''` | 工具名前缀，例如 `cu_`，避免与其他插件的 `click` 重名 |
+| `helperPath` | `null` | 覆盖 helper 路径（仅信任场景；协议版本需匹配） |
+
+最小示例：
 
 ```yaml
 - id: deepseek-computer-use
   config:
     approval: sensitive            # never | sensitive | always
+    appConsent: session            # 每个应用问一次；never 表示不问
     allowApps: ["notepad", "chrome"]   # 空 = 不限制
-    denyApps: []
-    defaultIncludeScreenshot: true     # 默认抓图；false 可显式关闭
-    maxElements: 260
-    snapshotTtlMs: 120000
-    dryRun: false
-    toolPrefix: ''                 # 填 'cu_' 可避免与其他插件的 click 重名
-    timeoutMs: 10000
+    redactApps: ["1password"]      # 这些应用的截图永不出本机
+    audio: false
 ```
 
 ## 与 Codex Windows window2 的关系
@@ -317,6 +371,8 @@ WGC 走 .NET Framework 4.8（Windows 10/11 自带），**用户不需要安装�
   「物理像素 / 截图像素」比例（实测某 WinForms 程序为 1.46×），坐标动作按该比例换算，
   所以**截图坐标点哪就点哪**。
 - **`useCount`、应用使用历史**没有可靠本机数据源，宁缺不编。
+- **`redactApps` 在插件层执行**：直接调用 helper 的 RPC 不受它约束，不要把 helper 单独暴露给非受信调用方。
+- **台前焦点类工具**（例如 Process Lasso）会让 `type_text` 返回 `focus_failed`，这是设计行为——宁可不输入，也不打到别的窗口。
 
 ## 测试
 
@@ -362,32 +418,6 @@ MIT。第三方商用前请自行做安全评审：这个插件能让模型操�
 | App 字段 | `isRunning` + `lastUsedDate`（进程启动时间）；`useCount` 无数据来源，按 Codex 的可选字段处理，不伪造 |
 
 marker 文件按 **会话 + turn** 命名，避免旧会话的 Esc 标记误伤新会话。
-
-## 配置示例
-
-```yaml
-- insert:
-    - id: deepseek-computer-use
-      name: 'deepseek-computer-use'
-      config:
-        approval: sensitive     # never | sensitive | always
-        appConsent: session     # 每个应用问一次；never 表示不问
-        audio: false            # 开启 WASAPI 环回录音（start/stop_audio_recording）
-        redactApps: []          # 这些应用的截图永不出机器，例如 ["1password", "银行"]
-        defaultIncludeScreenshot: true
-        timeoutMs: 10000        # 单次 RPC 超时（launch_app 用 launchTimeoutMs）
-        helperPath: null        # 覆盖 helper 路径（仅信任场景）
-        riskyPattern: ''        # 自定义「危险动作」正则，命中走审批
-        toolPrefix: ''          # 例如 cu_ 可避免和其他插件的 click 重名
-```
-
-## 已知边界
-
-- 只支持 Windows；驱动层是接口（`IPlatformDriver`），macOS / Linux 可照着补。
-- Codex window2 没有的接口（`paste` / `clipboard_*` / `key_down` / `move`）这里也没有。
-- `App.useCount` 没有数据来源，按可选字段留空，不伪造。
-- `redactApps` 在**插件层**执行：直接调用 helper 的 RPC 不受它约束，别把 helper 单独暴露给非受信调用方。
-- 抢焦点类工具（如 ProcessLasso）会让 `type_text` 返回 `focus_failed`，这是设计行为——宁可不输入，也不打到别的窗口。
 
 ## 插件更新
 

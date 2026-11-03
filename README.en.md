@@ -34,6 +34,14 @@ Start a task that needs a desktop app. Observe the window and controls before ac
 
 The native helper uses Windows UI Automation, SendInput and Windows.Graphics.Capture. Cancellation or the end of a turn stops its helper; failed actions require a fresh observation before retrying. Approval-required operations refuse when the host cannot ask. This is not an operating-system sandbox for untrusted applications.
 
+## Safety and recovery
+
+Actions pass these gates in order, and each refusal returns its own error code: hard denials that approval cannot override (terminals, Run dialog, credential and security UIs, authentication dialogs, the DSH host, the Windows/Meta key family); `allowApps` / `denyApps` reachability; one consent prompt per app per session (`appConsent`); action confirmation via DSH's approval seam (`approval`, which refuses with `approval_unavailable` when no approval service is mounted); and `redactApps`, whose screenshots never leave the machine.
+
+The plugin never retries an input whose outcome is unknown: it clears cached snapshots and asks for a fresh observation. Run `computer_use_health` first, then use the error-code table in the [Chinese guide](README.md#失败与恢复) for the recovery step of `hard_denied`, `app_not_approved`, `focus_failed`, `window_minimized`, `stale_screenshot`, `fresh_observation_required`, `cancelled_by_user` / `turn_stopped` and `protocol_mismatch`.
+
+The bundled `computer-use-windows` skill holds the operator playbook (observation loop, action choice, failure moves); ask the assistant to load it for harder desktop tasks.
+
 ## Updates
 
 Version controls are at the bottom of native plugin details. Automatic checks are on; automatic installation is off by default. Installation, deferral and update preferences remain user choices. The plugin does not force a DSH restart.
