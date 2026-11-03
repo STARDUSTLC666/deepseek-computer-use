@@ -1,6 +1,6 @@
 # 更新记录
 
-## 未发布
+## 0.2.7 (2026-11-03)
 
 - 文档整理：删除重复且过时的「安装」小节，安装路径只保留原生插件管理 + 重启 + `computer_use_health` 自检。
 - 「配置」改为完整选项表（含 `appConsent`、`redactApps`、`riskyPattern`、`launchTimeoutMs` 等），删掉第二份不完整的配置示例。
