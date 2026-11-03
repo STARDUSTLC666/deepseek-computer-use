@@ -1,6 +1,6 @@
 # 更新记录
 
-## 0.2.7 (2026-11-03)
+## 0.2.8 (2026-11-03)
 
 - 文档整理：删除重复且过时的「安装」小节，安装路径只保留原生插件管理 + 重启 + `computer_use_health` 自检。
 - 「配置」改为完整选项表（含 `appConsent`、`redactApps`、`riskyPattern`、`launchTimeoutMs` 等），删掉第二份不完整的配置示例。
@@ -8,6 +8,13 @@
 - 新增「失败与恢复」错误码表（18 行），说明每个失败该由用户还是助手处理；合并重复的「已知限制 / 已知边界」。
 - 中英文 README 都指向随包技能 `computer-use-windows`，作为助手侧的操作与失败处置手册。
 - Documentation pass: remove the duplicated installation section, publish one complete configuration table, document the real safety-gate order, merge the duplicated limitation sections, and add an error-code recovery table plus the bundled skill reference.
+
+## 0.2.7 (2026-10-30)
+
+- 重整中英文首页：用途、三步流程图、安装入口与操作示例；详细配置与边界集中到完整说明。
+- 保留下载统计、独立更新选择、问题反馈和贡献入口；原封面与运行功能保留。
+- Refresh bilingual landing pages, workflow artwork, quick starts and reference navigation.
+
 
 ## 0.2.6 (2026-10-30)
 
