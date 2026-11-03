@@ -32,10 +32,11 @@
   "scripts": {
     "build": "node lib/build.mjs && node scripts/build-updates.mjs",
     "build:helper": "node lib/build.mjs",
-    "test": "node scripts/build-updates.mjs && node --test test/contracts.test.mjs test/bridge.test.mjs && node test/integration.mjs",
+    "test": "node scripts/build-updates.mjs && node --test test/contracts.test.mjs test/bridge.test.mjs",
     "test:contracts": "node --test test/contracts.test.mjs test/bridge.test.mjs",
     "test:harness": "node test/harness.mjs",
-    "test:all": "npm test && node test/parity.mjs && node test/parity-js.mjs"
+    "test:all": "npm test && npm run test:integration && node test/parity.mjs && node test/parity-js.mjs",
+    "test:integration": "node test/integration.mjs"
   },
   "dsh": {
     "bundle": {

@@ -92,8 +92,10 @@ npm run build          # helper + overlay（csc），再尝试 dotnet 编 captur
 ## 自检
 
 ```bash
-npm test               # DSH 参数/策略回归 + 原生 WinForms 集成验证
-npm run test:contracts # 只运行参数与策略测试，不操作桌面
+npm test                 # DSH 参数/策略回归（不操作桌面，适合 CI）
+npm run test:contracts   # 只运行参数与策略测试
+npm run test:integration # 原生 WinForms 集成验证（会操作自己创建的测试窗口）
+npm run test:all         # 上面全部 + parity/JS 对照
 npm run test:harness -- --dsh-root /path/to/node_modules/@deepseek-ai/dsh
 # test:harness 启动隔离的真实 DSH CLI/profile，验证附件、审批和原生操作。
 # npm run test:all 另含真实系统音频录制测试，按需运行。
