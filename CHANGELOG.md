@@ -1,5 +1,11 @@
 # 更新记录
 
+## 0.2.9 (2026-11-04)
+
+- 同步共享界面：嵌入设置时继承宿主底色，输入框跟随主题，空状态保持可读宽度；新版 DSH 可显示插件设置图标。
+- Align embedded surfaces, themed inputs, readable empty states and optional native settings icons.
+
+
 ## 0.2.8 (2026-11-03)
 
 - 文档整理：删除重复且过时的「安装」小节，安装路径只保留原生插件管理 + 重启 + `computer_use_health` 自检。
