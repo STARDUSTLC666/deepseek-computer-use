@@ -22,7 +22,7 @@ Community plugin, not an official DeepSeek product.
 
 ## Install
 
-Requires Windows 10/11, Node.js 22.19+ (22.x) or 24+, and DSH 0.2.1-rc.3 or newer. In Desktop, install the package below from the native Plugins panel. For Web:
+Requires Windows 10/11, Node.js 22.19+ (22.x) or 24+, and DSH 0.2.2-rc.3 or newer. In Desktop, install the package below from the native Plugins panel. For Web:
 
 ```bash
 dsh plugin --profile web add deepseek-computer-use

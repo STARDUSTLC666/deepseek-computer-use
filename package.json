@@ -1,6 +1,6 @@
 {
   "name": "deepseek-computer-use",
-  "version": "0.2.9",
+  "version": "0.2.10",
   "description": "DSH 社区 Windows 桌面插件：窗口截图、界面控件、鼠标键盘、会话授权与操作审计。欢迎提交 issues 和 PR。",
   "type": "module",
   "main": "lib/index.js",
@@ -53,7 +53,7 @@
   },
   "engines": {
     "node": "^22.19.0 || >=24.0.0",
-    "dsh": ">=0.2.1-rc.3"
+    "dsh": ">=0.2.2-rc.3"
   },
   "keywords": [
     "dsh",
