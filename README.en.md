@@ -58,9 +58,9 @@ Check updates at the bottom of the workbench or native plugin details. Automatic
 - [Full usage, configuration and limits](https://github.com/STARDUSTLC666/deepseek-computer-use/blob/main/docs/REFERENCE.en.md)
 - [Release notes](https://github.com/STARDUSTLC666/deepseek-computer-use/blob/main/CHANGELOG.md)
 
-## Feedback and contributions
+## Feedback
 
-If the plugin helps, a Star makes it easier for others to discover. Report problems or suggest improvements in [Issues](https://github.com/STARDUSTLC666/deepseek-computer-use/issues); code and documentation [PRs](https://github.com/STARDUSTLC666/deepseek-computer-use/pulls) are welcome. Include versions and reproduction steps, and remove credentials from reports.
+If the plugin helps, a Star makes it easier for others to discover. Report problems or suggest improvements in [Issues](https://github.com/STARDUSTLC666/deepseek-computer-use/issues). Include versions and reproduction steps, and remove credentials from reports.
 
 ## License
 
