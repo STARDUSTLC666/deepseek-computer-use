@@ -1,5 +1,10 @@
 # 更新记录
 
+## 0.2.14 (2026-11-18)
+
+- 同步 `@stardustlc/dsh-updates` 0.2.1：恢复 Suite 整包统一更新（移除独立拆包迁移），保留整包与独立插件的原地热更新与失败自动回滚。
+- Sync `@stardustlc/dsh-updates` 0.2.1: restore unified Suite bundle updates (removing standalone conversion) while retaining in-place hot reload and automatic rollback.
+
 ## 0.2.13 (2026-11-18)
 
 - 深度适配 DSH 0.2.2：补齐 manifestVersion 1、双语元数据与 win32 平台声明；改用 Cordis 4 `ctx.effect` 异步清理桥接进程与光标状态，合并同会话并发启动并兼容 `ctx.approval` 审批服务。
