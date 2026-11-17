@@ -4,6 +4,8 @@
 
 **让 DSH 在授权范围内操作 Windows 应用。**
 
+DeepSeek Harness（`>=0.2.2-rc.3`）Windows 桌面操作插件：支持窗口截图、UIA 界面控件树读取、鼠标键盘输入、按会话应用授权及操作审计，并基于 Cordis `ctx.effect` 实现热重载时的桥接进程与光标状态自动回收。
+
 [![downloads](https://raw.githubusercontent.com/STARDUSTLC666/dsh-suite/npm-downloads/assets/dsh-computer-use-downloads.svg)](https://www.npmjs.com/package/deepseek-computer-use) [![total downloads](https://raw.githubusercontent.com/STARDUSTLC666/dsh-suite/npm-downloads/assets/dsh-computer-use-total-downloads.svg)](https://www.npmjs.com/package/deepseek-computer-use)
 [![npm](https://img.shields.io/npm/v/deepseek-computer-use.svg)](https://www.npmjs.com/package/deepseek-computer-use)
 
