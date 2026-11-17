@@ -1,6 +1,6 @@
 {
   "name": "deepseek-computer-use",
-  "version": "0.2.10",
+  "version": "0.2.11",
   "description": "DSH 社区 Windows 桌面插件：窗口截图、界面控件、鼠标键盘、会话授权与操作审计。欢迎提交 issues 和 PR。",
   "type": "module",
   "main": "lib/index.js",
@@ -43,12 +43,7 @@
       "patch": "./cordis.patch.yml"
     },
     "client": {
-      "platform": "web",
-      "inject": [
-        "@deepseek-ai/dsh-client-ui-settings",
-        "@deepseek-ai/dsh-client-ui-layout",
-        "@deepseek-ai/dsh-client-ui-sidebar"
-      ]
+      "platform": "web"
     }
   },
   "engines": {
@@ -83,7 +78,7 @@
     "access": "public"
   },
   "dependencies": {
-    "@stardustlc/dsh-updates": "0.1.4"
+    "@stardustlc/dsh-updates": "0.2.0"
   },
   "packageManager": "pnpm@11.7.0",
   "icon": "./assets/plugin-icon.webp"
