@@ -1,5 +1,10 @@
 # 更新记录
 
+## 0.2.12 (2026-11-18)
+
+- 深度适配 DSH 0.2.2：补齐 manifestVersion 1、双语元数据与 win32 平台声明；改用 Cordis 4 `ctx.effect` 异步清理桥接进程与光标状态，合并同会话并发启动并兼容 `ctx.approval` 审批服务。
+- Deeply adapt to DSH 0.2.2: declare manifestVersion 1, bilingual locale metadata, and win32 platform support; migrate bridge and cursor teardown to Cordis 4 `ctx.effect`, deduplicate concurrent session startups, and support `ctx.approval` fallback.
+
 ## 0.2.11 (2026-11-17)
 
 - 在原生插件详情页单独检查和安装兼容版本。自动安装默认关闭，可为该插件开启空闲时的稳定补丁更新。
