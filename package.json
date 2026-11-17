@@ -1,6 +1,6 @@
 {
   "name": "deepseek-computer-use",
-  "version": "0.2.12",
+  "version": "0.2.13",
   "description": "DSH 社区 Windows 桌面插件：窗口截图、界面控件、鼠标键盘、会话授权与操作审计。欢迎提交 issues 和 PR。",
   "type": "module",
   "main": "lib/index.js",
@@ -8,9 +8,7 @@
     ".": "./lib/index.js",
     "./cordis.patch.yml": "./cordis.patch.yml",
     "./package.json": "./package.json",
-    "./client": "./lib/update-client.js",
-    "./locale/*.json": "./locale/*.json",
-    "./icon": "./assets/plugin-icon.webp"
+    "./client": "./lib/update-client.js"
   },
   "files": [
     "lib",
@@ -29,8 +27,7 @@
     "CHANGELOG.md",
     "LICENSE",
     "README.en.md",
-    "assets/plugin-icon.webp",
-    "locale"
+    "assets/plugin-icon.webp"
   ],
   "scripts": {
     "build": "node lib/build.mjs && node scripts/build-updates.mjs",
@@ -42,12 +39,8 @@
     "test:integration": "node test/integration.mjs"
   },
   "dsh": {
-    "manifestVersion": 1,
     "bundle": {
-      "patch": "./cordis.patch.yml",
-      "platforms": [
-        "win32"
-      ]
+      "patch": "./cordis.patch.yml"
     },
     "client": {
       "platform": "web"

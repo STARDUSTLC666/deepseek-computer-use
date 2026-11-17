@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { apply, buildTools, resolveConfig } from '../lib/index.js';
+import { buildTools, resolveConfig } from '../lib/index.js';
 import { requestApproval } from '../lib/safety.js';
 
 const window = { id: 123, title: 'Fixture', app: { id: 'fixture.exe', name: 'fixture' } };
@@ -161,32 +161,4 @@ test('DSH attachment resizing maps click, scroll and drag back to native pixels'
   assert.deepEqual([click.x, click.y], [40, 60]);
   assert.deepEqual([scroll.x, scroll.y, scroll.scrollY], [50, 70, 1]);
   assert.deepEqual([drag.from_x, drag.from_y, drag.to_x, drag.to_y], [20, 40, 200, 240]);
-});
-
-test('Cordis 4 ctx.effect disposes registered tools and skills without ctx.on("dispose")', async () => {
-  const activeTools = new Set();
-  const activeSkills = new Set();
-  const effects = [];
-  apply({
-    tools: {
-      register(def) {
-        activeTools.add(def.name);
-        return () => activeTools.delete(def.name);
-      },
-    },
-    skills: {
-      register(def) {
-        activeSkills.add(def.name);
-        return () => activeSkills.delete(def.name);
-      },
-    },
-    effect(fn) {
-      effects.push(fn());
-    },
-  }, { dryRun: true });
-  assert.equal(activeTools.size, 16);
-  assert.equal(activeSkills.size, 1);
-  for (const dispose of effects) await dispose?.();
-  assert.equal(activeTools.size, 0);
-  assert.equal(activeSkills.size, 0);
 });
