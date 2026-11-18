@@ -9,13 +9,13 @@ importers:
   .:
     dependencies:
       '@stardustlc/dsh-updates':
-        specifier: 0.2.2
-        version: 0.2.2
+        specifier: 0.2.3
+        version: 0.2.3
 
 packages:
 
-  '@stardustlc/dsh-updates@0.2.2':
-    resolution: {integrity: sha512-fkrvINEzBIExAcdIgs7SgRqYdwsO3iW1OGSRkMZYLToAxWe8mYxGKp9KeGkLytA4v5mI1zxXAcUgr/maIq4MGA==}
+  '@stardustlc/dsh-updates@0.2.3':
+    resolution: {integrity: sha512-eI16KYb9u59ARKMMUqDeolpVCfkLsmCATIrceC77tbJH9AyFpls4gKsw7TsLZhN3J3vqeWX7K1dnBXu0RBvJwQ==}
     engines: {node: ^22.19.0 || >=24.0.0}
 
   acorn@8.15.0:
@@ -43,7 +43,7 @@ packages:
 
 snapshots:
 
-  '@stardustlc/dsh-updates@0.2.2':
+  '@stardustlc/dsh-updates@0.2.3':
     dependencies:
       acorn: 8.15.0
       proper-lockfile: 4.1.2
