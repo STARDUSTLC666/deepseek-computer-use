@@ -1,15 +1,14 @@
+import { buildCleanWin32Env } from '../lib/bridge.js';
+import { ensurePrepared, BIN_DIR } from '../lib/build-helper.mjs';
 import { spawn } from 'node:child_process';
 import { writeFileSync } from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 
-const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
-const exe = path.join(ROOT, 'native/bin/dsh-computer-use-helper.exe');
+const exe = (await ensurePrepared()).helperPath;
 const timeout = (p, ms, label) => Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error('timeout:' + label)), ms))]);
 
 function session() {
-  const child = spawn(exe, [], { stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true });
+  const child = spawn(exe, [], { stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true, env: buildCleanWin32Env({ DSH_CU_COMPONENT_DIR: BIN_DIR }) });
   let buf = ''; const pending = new Map(); let seq = 0;
   child.stdout.setEncoding('utf8');
   child.stdout.on('data', chunk => {

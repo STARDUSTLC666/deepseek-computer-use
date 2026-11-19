@@ -48,21 +48,30 @@ async function probe(ctx, config) {
   const require = createRequire(path.join(config.dshRoot, 'package.json'));
   const api = await importFile(require.resolve('@deepseek-ai/dsh-tools'));
   const schemas = ctx.tools.schemas().filter(tool => config.names.includes(tool.name));
-  assert.equal(schemas.length, 16);
+  assert.equal(schemas.length, 17);
   for (const tool of schemas) api.assertObjectJsonSchema(tool.parameters);
   assert.ok((await ctx.skills.list()).some(skill => skill.name === 'computer-use-windows'));
   const handles = [];
   const approvals = [];
+  const appApprovals = [];
   const answerer = ctx.on('approval/request', async req => {
     assert.ok(config.names.includes(req.toolName), 'Only fixture plugin approvals are allowed');
     approvals.push(req);
     return 'allowed-once';
   });
+  const appAnswerer = ctx.on('user-questions/request', (request, next) => {
+    const question = request.questions[0];
+    if (question?.id !== 'computer-use-app') return next();
+    appApprovals.push(request.agent);
+    return { answers: [{ id: question.id, selected: [question.intent.approve] }] };
+  }, { prepend: true });
   let seq = 0;
-  const execute = (agent, name, args = {}, signal = AbortSignal.timeout(20_000)) => ctx.tools.execute({
-    agent, name, arguments: args, callId: 'cu-harness-' + ++seq,
-    signal,
-  });
+  const execute = async (agent, name, args = {}, signal = AbortSignal.timeout(20_000)) => {
+    const batch = await ctx.tools.execute({ agent, signal,
+      calls: [{ type: 'tool-call', id: 'cu-harness-' + ++seq, name, arguments: JSON.stringify(args) }],
+    });
+    return batch.results[0].result;
+  };
   const success = async (...args) => {
     const result = await execute(...args);
     assert.equal(result.isError, false, JSON.stringify(result.content));
@@ -95,7 +104,7 @@ async function probe(ctx, config) {
     ctx.approval.setPolicy(a, 'ask');
 
     const observed = await success(a, 'get_window_state', params);
-    assert.equal(approvals.length, 1);
+    assert.equal(appApprovals.length, 1);
     assert.ok(observed.content.some(part => part.type === 'image'), 'The model must receive an image block');
     const state = observed.value;
     const image = state.screenshots[0].attachment;
@@ -111,18 +120,18 @@ async function probe(ctx, config) {
     const button = after.accessibility.elements.find(element => element.name === 'Delete all');
     assert.ok(button);
     await success(a, 'click', { window, element_index: button.index });
-    assert.equal(approvals.length, 2, 'The fixture clear button needs its own approval');
+    assert.equal(approvals.length, 1, 'The fixture clear button needs its own approval');
     after = (await success(a, 'get_window_state', params)).value;
     assert.ok(!after.accessibility.tree.includes(text), 'The approved native action must change the fixture');
 
     const b = await openAgent('b');
     await success(b, 'get_window_state', params);
-    assert.equal(approvals.length, 3, 'A second session must request its own app consent');
+    assert.equal(appApprovals.length, 2, 'A second session must request its own app consent');
     // Return to A: B must not have invalidated A's helper snapshot.
     const nextText = text + ' session-a';
     const aEdit = after.accessibility.elements.find(element => element.role === 'Edit');
     await success(a, 'set_value', { window, element_index: aEdit.index, value: nextText });
-    assert.equal(approvals.length, 3);
+    assert.equal(appApprovals.length, 2);
     after = (await success(a, 'get_window_state', params)).value;
     assert.ok(after.accessibility.tree.includes(nextText));
 
@@ -132,12 +141,46 @@ async function probe(ctx, config) {
     const retry = await execute(a, 'set_value', { window, element_index: aEdit.index, value: nextText });
     assert.equal(retry.isError, true);
     assert.match(JSON.stringify(retry.content), /get_window_state again/);
+
+    const bState = (await success(b, 'get_window_state', { ...params, include_screenshot: false })).value;
+    const bEdit = bState.accessibility.elements.find(element => element.role === 'Edit');
+    assert.ok(bEdit, 'The second session must expose its fixture edit control');
+    await success(b, 'set_value', { window, element_index: bEdit.index, value: 'turn-end-test' });
+    const ending = (await success(b, 'computer_use_health')).value;
+    const endingPid = ending.pid;
+    assert.ok(Number.isInteger(ending.overlayPid), 'The indicator must be running before turn end');
+    b.session.append('turn/end', { turn: 0, reason: { kind: 'completed' } });
+    let proactiveStop = false;
+    for (let i = 0; i < 100; i++) {
+      try { process.kill(endingPid, 0); } catch (error) { if (error.code === 'ESRCH') { proactiveStop = true; break; } throw error; }
+      await delay(20);
+    }
+    assert.ok(proactiveStop, 'The turn/end event must stop the helper without another tool call');
+    for (let i = 0; i < 100; i++) {
+      try { process.kill(ending.overlayPid, 0); } catch (error) { if (error.code === 'ESRCH') break; throw error; }
+      await delay(20);
+    }
+    assert.throws(() => process.kill(ending.overlayPid, 0), error => error.code === 'ESRCH', 'The turn/end event must stop the indicator');
+    const ended = await execute(b, 'activate_window', { window });
+    assert.equal(ended.isError, true);
+    assert.match(JSON.stringify(ended.content), /turn.*ended/);
+
     after = (await success(a, 'get_window_state', params)).value;
     const freshEdit = after.accessibility.elements.find(element => element.role === 'Edit');
     await success(a, 'set_value', { window, element_index: freshEdit.index, value: '' });
     const focus = await execute(a, 'click', { window, element_index: freshEdit.index });
     let nativeCancellation = 'SKIP: fixture focus unavailable';
+    let nativeHoldRelease = 'SKIP: fixture focus unavailable';
     if (!focus.isError) {
+      const held = await execute(a, 'click', { window, element_index: freshEdit.index, holdMs: 300 });
+      if (!held.isError) {
+        assert.equal(held.value.releaseVerified, true);
+        nativeHoldRelease = 'passed: 300ms pointer hold and release verified';
+      } else {
+        assert.match(JSON.stringify(held.content), /foreground|point is not owned|pointer point/);
+        nativeHoldRelease = 'SKIP: Windows foreground or point ownership changed';
+        await success(a, 'get_window_state', params);
+      }
       const pid = (await success(a, 'computer_use_health')).value.pid;
       const controller = new AbortController();
       const typing = execute(a, 'type_text', { window, text: 'z'.repeat(100_000) }, controller.signal);
@@ -166,34 +209,14 @@ async function probe(ctx, config) {
       after = (await success(a, 'get_window_state', params)).value;
       assert.notEqual((await success(a, 'computer_use_health')).value.pid, pid);
     }
-    const bState = (await success(b, 'get_window_state', params)).value;
-    const bEdit = bState.accessibility.elements.find(element => element.role === 'Edit');
-    await success(b, 'set_value', { window, element_index: bEdit.index, value: 'turn-end-test' });
-    const ending = (await success(b, 'computer_use_health')).value;
-    const endingPid = ending.pid;
-    assert.ok(Number.isInteger(ending.overlayPid), 'The indicator must be running before turn end');
-    b.session.append('turn/end', { turn: 0, reason: { kind: 'completed' } });
-    let proactiveStop = false;
-    for (let i = 0; i < 100; i++) {
-      try { process.kill(endingPid, 0); } catch (error) { if (error.code === 'ESRCH') { proactiveStop = true; break; } throw error; }
-      await delay(20);
-    }
-    assert.ok(proactiveStop, 'The turn/end event must stop the helper without another tool call');
-    for (let i = 0; i < 100; i++) {
-      try { process.kill(ending.overlayPid, 0); } catch (error) { if (error.code === 'ESRCH') break; throw error; }
-      await delay(20);
-    }
-    assert.throws(() => process.kill(ending.overlayPid, 0), error => error.code === 'ESRCH', 'The turn/end event must stop the indicator');
-    const ended = await execute(b, 'activate_window', { window });
-    assert.equal(ended.isError, true);
-    assert.match(JSON.stringify(ended.content), /turn.*ended/);
     a.session.append('turn/end', { turn: nativeCancellation.startsWith('SKIP') ? 0 : 1, reason: { kind: 'completed' } });
     return { toolCount: schemas.length, skillRegistered: true, approvalAudit: true,
       screenshotStored: true, imageRendered: true, nativeSetValue: true, nativeClick: true,
       sessionIsolation: true, turnEndBlocked: true, proactiveTurnStop: true, failedInputRecovery: true,
-      nativeCancellation, audio: 'SKIP: no recording performed' };
+      nativeCancellation, nativeHoldRelease, audio: 'SKIP: no recording performed' };
   } finally {
     answerer();
+    appAnswerer();
     for (const handle of handles.reverse()) await handle.dispose();
   }
 }
@@ -234,9 +257,8 @@ async function main() {
   });
   try {
     const { buildTools, resolveConfig } = await importFile(path.join(pluginRoot, 'lib', 'index.js'));
-    const { ensureHelper, ensureOverlay } = await importFile(path.join(pluginRoot, 'lib', 'build-helper.mjs'));
-    ensureHelper();
-    ensureOverlay();
+    const { ensurePrepared } = await importFile(path.join(pluginRoot, 'lib', 'build-helper.mjs'));
+    await ensurePrepared();
     const fixtureExe = path.join(home, 'dsh-cu-fixture.exe');
     const progressFile = path.join(home, 'input-length.txt');
     {
@@ -275,7 +297,7 @@ async function main() {
     while (!existsSync(report) && Date.now() < deadline && child.exitCode === null) await delay(150);
     assert.ok(existsSync(report), 'DSH probe did not finish: ' + output.slice(-5000));
     const result = JSON.parse(readFileSync(report, 'utf8'));
-    assert.equal(result.ok, true, result.error ?? output.slice(-5000));
+    assert.equal(result.ok, true, [result.error, output.slice(-5000)].filter(Boolean).join('\n'));
     console.log(JSON.stringify({ dshVersion, pluginVersion: manifest.version, pluginRoot, ...result }, null, 2));
   } finally {
     // Only terminate processes created by this test, never by executable name.

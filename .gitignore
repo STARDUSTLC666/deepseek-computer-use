@@ -9,3 +9,4 @@ test/.out/
 .DS_Store
 Thumbs.db
 .release/
+native/.build/

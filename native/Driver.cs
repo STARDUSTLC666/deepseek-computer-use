@@ -20,6 +20,11 @@ public interface IPlatformDriver : IDisposable
     Dictionary<string, object> Ping(Dictionary<string, object> p);
     Dictionary<string, object> Hello(Dictionary<string, object> p);
     Dictionary<string, object> RestoreCursor(Dictionary<string, object> p);
+    Dictionary<string, object> GetSystemStatus(Dictionary<string, object> p);
+    Dictionary<string, object> GetAppIcons(Dictionary<string, object> p);
+    Dictionary<string, object> RevokeApp(Dictionary<string, object> p);
+    Dictionary<string, object> MouseMove(Dictionary<string, object> p);
+    Dictionary<string, object> ShowWindowWithoutActivation(Dictionary<string, object> p);
     void Maintenance();
     Dictionary<string, object> Close(Dictionary<string, object> p);
     Dictionary<string, object> ListWindows(Dictionary<string, object> p);
@@ -130,6 +135,25 @@ public class WindowsDriver : IPlatformDriver
     [DllImport("dwmapi.dll")] static extern int DwmGetWindowAttribute(IntPtr hwnd, int attr, out RECT r, int size);
     [DllImport("user32.dll")] static extern IntPtr GetWindow(IntPtr hWnd, uint cmd);
     [DllImport("user32.dll")] static extern int GetWindowLong(IntPtr hWnd, int index);
+    [DllImport("kernel32.dll")] static extern IntPtr OpenProcess(uint access, bool inherit, uint pid);
+    [DllImport("kernel32.dll")] static extern bool CloseHandle(IntPtr handle);
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, ExactSpelling = true)] static extern int GetApplicationUserModelId(IntPtr process, ref uint size, StringBuilder id);
+    [DllImport("advapi32.dll")] static extern bool OpenProcessToken(IntPtr process, uint access, out IntPtr token);
+    [DllImport("advapi32.dll")] static extern bool GetTokenInformation(IntPtr token, int type, out int value, int size, out int returned);
+    [DllImport("user32.dll")] static extern IntPtr OpenInputDesktop(uint flags, bool inherit, uint access);
+    [DllImport("user32.dll")] static extern bool CloseDesktop(IntPtr desktop);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern bool GetUserObjectInformationW(IntPtr handle, int index, StringBuilder value, uint size, out uint needed);
+    [DllImport("user32.dll")] static extern short GetAsyncKeyState(int key);
+    [DllImport("user32.dll")] static extern IntPtr WindowFromPoint(POINT point);
+    [DllImport("user32.dll")] static extern IntPtr WindowFromPhysicalPoint(POINT point);
+    [DllImport("user32.dll")] static extern bool SetPhysicalCursorPos(int x, int y);
+    [DllImport("user32.dll")] static extern bool GetPhysicalCursorPos(out POINT point);
+    [DllImport("user32.dll")] static extern IntPtr GetAncestor(IntPtr handle, uint flags);
+    [DllImport("user32.dll")] static extern bool ClientToScreen(IntPtr hwnd, ref POINT point);
+    [DllImport("user32.dll")] static extern uint GetDpiForWindow(IntPtr hwnd);
+    [DllImport("user32.dll")] static extern IntPtr GetWindowDC(IntPtr hwnd);
+    [DllImport("user32.dll")] static extern int ReleaseDC(IntPtr hwnd, IntPtr dc);
+    [DllImport("gdi32.dll")] static extern bool BitBlt(IntPtr dst, int x, int y, int w, int h, IntPtr src, int sx, int sy, uint op);
 
     [StructLayout(LayoutKind.Sequential)] struct RECT { public int Left, Top, Right, Bottom; }
     [StructLayout(LayoutKind.Sequential)] struct POINT { public int X, Y; }
@@ -174,16 +198,30 @@ public class WindowsDriver : IPlatformDriver
         public Dictionary<long, AutomationElement> Elements = new Dictionary<long, AutomationElement>();
         public Dictionary<long, string> FallbackLabels = new Dictionary<long, string>();
         public List<object> Summary = new List<object>();
+        public HashSet<string> RuntimeIds = new HashSet<string>();
+        public bool IncludeMenus, Details, HasUnreadableElements;
+        public int MaxDepth;
+    }
+
+    sealed class Geometry
+    {
+        public RECT Frame, Client;
+        public uint Dpi, Pid;
+        public DateTime At;
     }
 
     readonly Dictionary<long, Snapshot> _snapshots = new Dictionary<long, Snapshot>();
+    readonly Dictionary<long, Geometry> _geometry = new Dictionary<long, Geometry>();
     int _snapshotTtlMs = 120000;
+    int _maxClickHoldMs = 5000;
 
     /// A screenshot region the model was handed, so a later coordinate action can
     /// be interpreted in that exact screenshot space (Codex: screenshotId).
     sealed class ShotRegion
     {
         public long WindowId;
+        public IntPtr Surface;
+        public Geometry Geometry;
         public int OriginX;
         public int OriginY;
         public int Width;
@@ -230,20 +268,29 @@ public class WindowsDriver : IPlatformDriver
     public WindowsDriver()
     {
         Maintenance(); // startup repair: a previous session may have died with cursors hidden
-        try { SetThreadDpiAwarenessContext(new IntPtr(-4)); } catch { }
         try { SetProcessDPIAware(); } catch { }
+        try { SetThreadDpiAwarenessContext(new IntPtr(-4)); } catch { }
     }
 
     public void Dispose()
     {
         if (_cursorWatchdog != null) { _cursorWatchdog.Dispose(); _cursorWatchdog = null; }
-        StopOverlay();
+        if (_overlay != null) StopOverlay();
+        if (_cursorFile != null) { try { File.Delete(_cursorFile); } catch { } }
+        if (_audioProcess != null)
+        {
+            try { if (!_audioProcess.HasExited) _audioProcess.Kill(); } catch { }
+            _audioProcess.Dispose();
+            try { if (_audioStopFile != null) File.Delete(_audioStopFile); } catch { }
+            try { if (_audioPath != null) File.Delete(_audioPath); } catch { }
+        }
     }
 
     // ---- approval plumbing ----
     public Dictionary<string, object> Configure(Dictionary<string, object> p)
     {
         _requireAppApproval = Json.GetBool(p, "requireAppApproval", _requireAppApproval);
+        _maxClickHoldMs = (int)Math.Max(0, Math.Min(5000, Json.GetLong(p, "maxClickHoldMs", _maxClickHoldMs)));
         Dictionary<string, object> r = new Dictionary<string, object>();
         r["requireAppApproval"] = _requireAppApproval;
         return r;
@@ -260,13 +307,22 @@ public class WindowsDriver : IPlatformDriver
         return r;
     }
 
+    public Dictionary<string, object> RevokeApp(Dictionary<string, object> p)
+    {
+        string id = Json.GetString(p, "app");
+        if (string.IsNullOrEmpty(id)) throw new ToolError("bad_request", "revoke_app requires an app id");
+        lock (_sync) { _approvedApps.Remove(id); }
+        InvalidateState(p);
+        return new Dictionary<string, object> { { "revoked", true } };
+    }
+
     /// Turn boundary: drop per-turn state (element snapshots, screenshot regions, the
     /// Esc block, the indicator) but keep session-scoped app approvals.
     public Dictionary<string, object> EndTurn(Dictionary<string, object> p)
     {
-        string ending = Json.GetString(p, "turnToken");
+        string ending = Json.GetString(p, "endingTurn") ?? Json.GetString(p, "turnToken");
         if (ending != null) ClearInterrupt(ending);
-        lock (_sync) { _snapshots.Clear(); _shots.Clear(); }
+        lock (_sync) { _snapshots.Clear(); _shots.Clear(); _geometry.Clear(); }
         _interruptedTurn = null;
         StopOverlay();
         Dictionary<string, object> r = new Dictionary<string, object>();
@@ -277,7 +333,7 @@ public class WindowsDriver : IPlatformDriver
 
     public Dictionary<string, object> InvalidateState(Dictionary<string, object> p)
     {
-        lock (_sync) { _snapshots.Clear(); _shots.Clear(); }
+        lock (_sync) { _snapshots.Clear(); _shots.Clear(); _geometry.Clear(); }
         StopOverlay();
         return new Dictionary<string, object> { { "invalidated", true } };
     }
@@ -287,7 +343,8 @@ public class WindowsDriver : IPlatformDriver
         if (!_requireAppApproval) return;
         uint pid;
         GetWindowThreadProcessId(h, out pid);
-        string id = ProcessPathOf(pid);
+        string id = AppIdOf(pid);
+        if (id == null) throw new ToolError("app_identity_unavailable", "the helper could not identify the window owner");
         lock (_sync) { if (_approvedApps.Contains(id)) return; }
         throw new ToolError("app_not_approved", "the Computer Use policy has not approved '" + id + "' yet. Approve the app through the DSH approval prompt before acting on its windows.");
     }
@@ -305,8 +362,7 @@ public class WindowsDriver : IPlatformDriver
         if (_audioProcess != null && !_audioProcess.HasExited)
             throw new ToolError("audio_running", "an audio recording is already running; stop it first");
 
-        string dir = Path.GetDirectoryName(typeof(WindowsDriver).Assembly.Location) ?? ".";
-        string exe = Path.Combine(dir, "audio", "dsh-cu-audio.exe");
+        string exe = ComponentPath("audio", "dsh-cu-audio.exe");
         if (!File.Exists(exe)) throw new ToolError("audio_missing", "audio recorder not found at " + exe);
 
         long maxMs = Json.GetLong(p, "maxDurationMs", 60000);
@@ -360,6 +416,14 @@ public class WindowsDriver : IPlatformDriver
     }
 
     // ---- in-use indicator ----
+    static string ComponentPath(string name, string file)
+    {
+        string directory = Path.GetDirectoryName(typeof(WindowsDriver).Assembly.Location) ?? ".";
+        string adjacent = Path.Combine(directory, name, file);
+        string configured = Environment.GetEnvironmentVariable("DSH_CU_COMPONENT_DIR");
+        return File.Exists(adjacent) || string.IsNullOrEmpty(configured) ? adjacent : Path.Combine(configured, name, file);
+    }
+
     static string OverlayExePath()
     {
         string dir = Path.GetDirectoryName(typeof(WindowsDriver).Assembly.Location);
@@ -422,6 +486,7 @@ public class WindowsDriver : IPlatformDriver
         {
             ProcessStartInfo psi = new ProcessStartInfo(exe, args.ToString());
             psi.UseShellExecute = false;
+            psi.CreateNoWindow = true;
             _overlay = Process.Start(psi);
             _overlayUntil = DateTime.UtcNow.AddMilliseconds(ttlMs);
             // Codex runs a dedicated system-cursor-manager process that restores the
@@ -436,7 +501,9 @@ public class WindowsDriver : IPlatformDriver
 
     void StopOverlay()
     {
-        try { if (_overlay != null && !_overlay.HasExited) _overlay.Kill(); } catch { }
+        if (_overlay == null) return;
+        try { if (!_overlay.HasExited) { _overlay.Kill(); _overlay.WaitForExit(250); } } catch { }
+        _overlay.Dispose();
         // Kill() skips the overlay's exit handlers, which is where it would restore the
         // system cursors. Restore them from here so a terminated overlay can never leave
         // the user without a pointer.
@@ -467,7 +534,7 @@ public class WindowsDriver : IPlatformDriver
         throw new ToolError("cancelled_by_user", EscMessage);
     }
 
-    const int ProtocolVersion = 2;
+    const int ProtocolVersion = 3;
 
     static string InterruptMarkerPath(string token)
     {
@@ -515,17 +582,74 @@ public class WindowsDriver : IPlatformDriver
         try { File.WriteAllText(_cursorFile, x.ToString(System.Globalization.CultureInfo.InvariantCulture) + "," + y.ToString(System.Globalization.CultureInfo.InvariantCulture) + "," + DateTime.UtcNow.Ticks.ToString(System.Globalization.CultureInfo.InvariantCulture)); } catch { }
     }
 
-    /// Codex reports screenLocked instead of failing with an opaque automation error.
+    static bool DesktopLocked()
+    {
+        IntPtr desktop = OpenInputDesktop(0, false, 1);
+        if (desktop == IntPtr.Zero) return true;
+        try
+        {
+            StringBuilder name = new StringBuilder(128);
+            uint needed;
+            return !GetUserObjectInformationW(desktop, 2, name, (uint)name.Capacity * 2, out needed)
+                || !name.ToString().Equals("Default", StringComparison.OrdinalIgnoreCase);
+        }
+        finally { CloseDesktop(desktop); }
+    }
+
     static void AssertUnlocked()
     {
-        IntPtr fg = GetForegroundWindow();
-        if (fg == IntPtr.Zero) return;
-        uint pid;
-        GetWindowThreadProcessId(fg, out pid);
-        string proc = "";
-        try { proc = Process.GetProcessById((int)pid).ProcessName; } catch { }
-        if (proc.Equals("LockApp", StringComparison.OrdinalIgnoreCase) || proc.Equals("LogonUI", StringComparison.OrdinalIgnoreCase))
-            throw new ToolError("screen_locked", "the Windows desktop is locked (LockApp is in the foreground), so Computer Use cannot interact with it. Ask the user to unlock the desktop and stop trying until they do.");
+        if (DesktopLocked()) throw new ToolError("screen_locked", "the interactive Windows desktop is locked or unavailable");
+    }
+
+    public Dictionary<string, object> GetSystemStatus(Dictionary<string, object> p)
+    {
+        int elevation = 0, returned;
+        IntPtr token;
+        using (Process process = Process.GetCurrentProcess())
+        {
+            if (OpenProcessToken(process.Handle, 8, out token))
+            {
+                try { GetTokenInformation(token, 20, out elevation, sizeof(int), out returned); }
+                finally { CloseHandle(token); }
+            }
+        }
+        return new Dictionary<string, object> {
+            { "platform", "windows" }, { "helperName", "dsh-computer-use-helper.exe" },
+            { "helperPath", typeof(WindowsDriver).Assembly.Location }, { "protocolVersion", ProtocolVersion },
+            { "sessionLocked", DesktopLocked() }, { "isElevated", elevation != 0 },
+            { "captureAvailable", File.Exists(ComponentPath("capture", "dsh-cu-capture.exe")) },
+            { "audioAvailable", File.Exists(ComponentPath("audio", "dsh-cu-audio.exe")) },
+            { "cursorSuppressed", File.Exists(OverlayCursorFlagPath()) }
+        };
+    }
+
+    public Dictionary<string, object> GetAppIcons(Dictionary<string, object> p)
+    {
+        List<object> paths = Json.Get(p, "paths") as List<object>;
+        if (paths == null || paths.Count > 32) throw new ToolError("bad_request", "get_app_icons accepts up to 32 executable paths");
+        Dictionary<string, object> icons = new Dictionary<string, object>();
+        foreach (object value in paths)
+        {
+            Budget.Check();
+            string path = value as string;
+            if (path == null || path.Length < 4 || !char.IsLetter(path[0]) || path[1] != ':' || path[2] != '\\') continue;
+            try
+            {
+                if (new DriveInfo(Path.GetPathRoot(path)).DriveType != DriveType.Fixed || !File.Exists(path)) continue;
+                using (Icon icon = Icon.ExtractAssociatedIcon(path))
+                using (Bitmap bmp = new Bitmap(64, 64, PixelFormat.Format32bppArgb))
+                using (Graphics graphics = Graphics.FromImage(bmp))
+                using (MemoryStream output = new MemoryStream())
+                {
+                    if (icon == null) continue;
+                    graphics.DrawIcon(icon, new Rectangle(0, 0, 64, 64));
+                    bmp.Save(output, ImageFormat.Png);
+                    icons[path] = "data:image/png;base64," + Convert.ToBase64String(output.ToArray());
+                }
+            }
+            catch (Exception) { /* Surfaces can disappear before icon extraction. */ }
+        }
+        return icons;
     }
 
     // ---- helpers ----
@@ -567,31 +691,57 @@ public class WindowsDriver : IPlatformDriver
     {
         try
         {
-            Process p = Process.GetProcessById((int)pid);
-            try { return p.MainModule.FileName; }
-            catch { return p.ProcessName; }
+            using (Process p = Process.GetProcessById((int)pid))
+            {
+                try { return p.MainModule.FileName; }
+                catch { return p.ProcessName; }
+            }
         }
         catch { return "unknown"; }
     }
 
     static string ProcessNameOf(uint pid)
     {
-        try { return Process.GetProcessById((int)pid).ProcessName; }
+        try { using (Process p = Process.GetProcessById((int)pid)) return p.ProcessName; }
         catch { return "unknown"; }
+    }
+
+    static string AumidOf(uint pid)
+    {
+        IntPtr process = OpenProcess(0x1000, false, pid);
+        if (process == IntPtr.Zero) return null;
+        try
+        {
+            uint length = 0;
+            if (GetApplicationUserModelId(process, ref length, null) != 122 || length == 0 || length > 2048) return null;
+            StringBuilder id = new StringBuilder((int)length);
+            return GetApplicationUserModelId(process, ref length, id) == 0 ? id.ToString() : null;
+        }
+        finally { CloseHandle(process); }
+    }
+
+    static string AppIdOf(uint pid)
+    {
+        string path = ProcessPathOf(pid);
+        return AumidOf(pid) ?? (Path.IsPathRooted(path) ? path : null);
     }
 
     Dictionary<string, object> AppOf(uint pid)
     {
         Dictionary<string, object> app = new Dictionary<string, object>();
         string full = ProcessPathOf(pid);
-        app["id"] = full;
+        string executable = Path.IsPathRooted(full) ? full : null;
+        string aumid = AumidOf(pid);
+        app["id"] = aumid ?? executable;
+        app["executablePath"] = executable;
+        app["aumid"] = aumid;
         app["name"] = Path.GetFileNameWithoutExtension(full);
         app["displayName"] = ProcessNameOf(pid);
         app["pid"] = (long)pid;
         try
         {
-            Process proc = Process.GetProcessById((int)pid);
-            app["lastUsedDate"] = proc.StartTime.ToUniversalTime().ToString("o");
+            using (Process proc = Process.GetProcessById((int)pid))
+                app["lastUsedDate"] = proc.StartTime.ToUniversalTime().ToString("o");
         }
         catch { }
         return app;
@@ -673,8 +823,12 @@ public class WindowsDriver : IPlatformDriver
 
     public Dictionary<string, object> RestoreCursor(Dictionary<string, object> p)
     {
-        RestoreCursors();
-        try { File.Delete(OverlayCursorFlagPath()); } catch { }
+        if (_overlay != null) StopOverlay();
+        else if (!Json.GetBool(p, "ownedOnly", false))
+        {
+            RestoreCursors();
+            try { File.Delete(OverlayCursorFlagPath()); } catch { }
+        }
         Dictionary<string, object> r = new Dictionary<string, object>();
         r["restored"] = true;
         return r;
@@ -691,7 +845,8 @@ public class WindowsDriver : IPlatformDriver
         foreach (string c in new string[] {
             "window2", "accessibility_tree", "multi_screenshot", "wgc_capture",
             "virtual_cursor", "audio_recording", "turn_interrupt", "app_approval",
-            "screenshot_ids", "budgeted_capture" }) caps.Add(c);
+            "screenshot_ids", "budgeted_capture", "uia", "wgc", "wasapi", "relative_coords", "hold_ms",
+            "app_icons", "window_geometry_guard", "bounded_screenshot" }) caps.Add(c);
         d["capabilities"] = caps;
         return d;
     }
@@ -723,43 +878,29 @@ public class WindowsDriver : IPlatformDriver
 
     public Dictionary<string, object> ListApps(Dictionary<string, object> p)
     {
-        Dictionary<string, List<object>> grouped = new Dictionary<string, List<object>>();
-        Dictionary<string, Dictionary<string, object>> appInfo = new Dictionary<string, Dictionary<string, object>>();
-        List<IntPtr> hs = EnumerateWindows(true);
-        for (int i = 0; i < hs.Count; i++)
-        {
-            uint pid;
-            GetWindowThreadProcessId(hs[i], out pid);
-            Dictionary<string, object> app = AppOf(pid);
-            string key = Convert.ToString(app["id"]);
-            if (!grouped.ContainsKey(key)) { grouped[key] = new List<object>(); appInfo[key] = app; }
-            grouped[key].Add(WindowDict(hs[i], pid, i));
-        }
+        Dictionary<string, Dictionary<string, object>> grouped = new Dictionary<string, Dictionary<string, object>>(StringComparer.OrdinalIgnoreCase);
         List<object> apps = new List<object>();
-        foreach (KeyValuePair<string, List<object>> kv in grouped)
+        List<IntPtr> windows = EnumerateWindows(true);
+        for (int i = 0; i < windows.Count; i++)
         {
-            Dictionary<string, object> a = appInfo[kv.Key];
-            a["isRunning"] = true;
-            try
+            Budget.Check();
+            IntPtr hwnd = windows[i];
+            Dictionary<string, object> window = WindowDict(hwnd, PidOf(hwnd), i);
+            Dictionary<string, object> app = Json.AsObject(window["app"]);
+            string id = Json.GetString(app, "id");
+            if (string.IsNullOrEmpty(id)) continue;
+            Dictionary<string, object> entry;
+            if (!grouped.TryGetValue(id, out entry))
             {
-                IntPtr sample = IntPtr.Zero;
-                List<IntPtr> windowsOfApp = new List<IntPtr>();
-                for (int w = 0; w < hs.Count; w++)
-                {
-                    uint wpid;
-                    GetWindowThreadProcessId(hs[w], out wpid);
-                    if (Convert.ToString(AppOf(wpid)["id"]) == kv.Key) { sample = hs[w]; break; }
-                }
-                if (sample != IntPtr.Zero)
-                {
-                    uint spid;
-                    GetWindowThreadProcessId(sample, out spid);
-                    a["lastUsedDate"] = Process.GetProcessById((int)spid).StartTime.ToUniversalTime().ToString("o");
-                }
+                entry = new Dictionary<string, object>(app);
+                entry["isRunning"] = true;
+                entry["windows"] = new List<object>();
+                grouped[id] = entry;
+                apps.Add(entry);
             }
-            catch { }
-            a["windows"] = kv.Value;
-            apps.Add(a);
+            List<object> owned = (List<object>)entry["windows"];
+            owned.Add(window);
+            entry["windowCount"] = owned.Count;
         }
         Dictionary<string, object> d = new Dictionary<string, object>();
         d["apps"] = apps;
@@ -779,12 +920,28 @@ public class WindowsDriver : IPlatformDriver
 
     public Dictionary<string, object> ActivateWindow(Dictionary<string, object> p)
     {
+        CheckCancel(p);
+        AssertUnlocked();
         IntPtr h = ResolveWindow(p);
+        AssertAppApproved(h);
+        bool changed = GetForegroundWindow() != h;
         Activate(h);
         Dictionary<string, object> d = new Dictionary<string, object>();
+        d["foregroundChanged"] = changed;
+        d["dispatched"] = true;
         d["activated"] = true;
         d["window"] = WindowDict(h, PidOf(h), 0);
         return d;
+    }
+
+    public Dictionary<string, object> ShowWindowWithoutActivation(Dictionary<string, object> p)
+    {
+        CheckCancel(p);
+        AssertUnlocked();
+        IntPtr h = ResolveWindow(p);
+        AssertAppApproved(h);
+        if (IsIconic(h)) ShowWindow(h, 4); // SW_SHOWNOACTIVATE
+        return new Dictionary<string, object> { { "dispatched", !IsIconic(h) } };
     }
 
     static uint PidOf(IntPtr h) { uint pid; GetWindowThreadProcessId(h, out pid); return pid; }
@@ -910,36 +1067,79 @@ public class WindowsDriver : IPlatformDriver
         if (id == 0) throw new ToolError("bad_request", "a 'window' object with a numeric 'id' is required (use list_windows / list_apps)");
         IntPtr h = new IntPtr(id);
         if (!IsWindow(h)) throw new ToolError("window_gone", "window " + id + " no longer exists; call list_windows again");
+        long expectedPid = Json.GetLong(p, "expectedPid", 0);
+        string expectedApp = Json.GetString(p, "expectedAppId");
+        if ((expectedPid > 0 && PidOf(h) != expectedPid) || (expectedApp != null && !string.Equals(expectedApp, AppIdOf(PidOf(h)), StringComparison.OrdinalIgnoreCase)))
+            throw new ToolError("WINDOW_CHANGED", "the window owner changed; choose the window again");
         return h;
     }
 
     // ---- observation ----
+    static Geometry ReadGeometry(IntPtr h)
+    {
+        RECT client;
+        POINT origin = new POINT();
+        if (!GetClientRect(h, out client) || !ClientToScreen(h, ref origin))
+            throw new ToolError("window_gone", "cannot read the target window geometry");
+        uint dpi = 96;
+        try { dpi = GetDpiForWindow(h); } catch (EntryPointNotFoundException) { }
+        return new Geometry {
+            Frame = BoundsOf(h), Dpi = dpi, Pid = PidOf(h), At = DateTime.UtcNow,
+            Client = new RECT { Left = origin.X, Top = origin.Y, Right = origin.X + client.Right, Bottom = origin.Y + client.Bottom }
+        };
+    }
+
+    static void AssertGeometry(Geometry before, Geometry now)
+    {
+        if (before.Pid != now.Pid || before.Dpi != now.Dpi
+            || Math.Abs((before.Client.Right - before.Client.Left) - (now.Client.Right - now.Client.Left)) > 2
+            || Math.Abs((before.Client.Bottom - before.Client.Top) - (now.Client.Bottom - now.Client.Top)) > 2
+            || Math.Abs((before.Frame.Right - before.Frame.Left) - (now.Frame.Right - now.Frame.Left)) > 2
+            || Math.Abs((before.Frame.Bottom - before.Frame.Top) - (now.Frame.Bottom - now.Frame.Top)) > 2)
+            throw new ToolError("WINDOW_CHANGED", "Target window was resized or changed DPI or owner since the last observation. Call get_window_state to capture a fresh state before retrying");
+    }
+
     public Dictionary<string, object> GetWindowState(Dictionary<string, object> p)
     {
+        CheckCancel(p);
+        AssertUnlocked();
         IntPtr h = ResolveWindow(p);
         AssertAppApproved(h);
         bool includeText = Json.GetBool(p, "include_text", false);
         bool includeShot = Json.GetBool(p, "include_screenshot", false);
         long maxElements = Json.GetLong(p, "maxElements", 260);
-        long ttl = Json.GetLong(p, "ttlMs", _snapshotTtlMs);
+        int ttl = (int)Math.Max(1000, Math.Min(3600000, Json.GetLong(p, "ttlMs", _snapshotTtlMs)));
+        _snapshotTtlMs = _shotTtlMs = ttl;
 
-        uint pid;
-        GetWindowThreadProcessId(h, out pid);
+        Geometry geometry = ReadGeometry(h);
         Dictionary<string, object> result = new Dictionary<string, object>();
-        result["window"] = WindowDict(h, pid, 0);
+        result["window"] = WindowDict(h, geometry.Pid, 0);
+        RECT client = geometry.Client;
+        result["clientBounds"] = RectDict(client.Left, client.Top, client.Right - client.Left, client.Bottom - client.Top);
+        result["dpiScale"] = geometry.Dpi / 96.0;
 
         // Codex parity: accessibility is null unless include_text was asked for.
-        result["accessibility"] = includeText ? (object)BuildAccessibility(h, maxElements, (int)ttl) : null;
-        bool blank;
-        result["screenshots"] = includeShot ? (object)CaptureScreenshots(h, out blank) : new List<object>();
+        result["accessibility"] = includeText ? (object)BuildAccessibility(h, maxElements, ttl, p) : null;
+        result["screenshots"] = includeShot ? CaptureScreenshots(h, Json.AsObject(Json.Get(p, "region")), Json.GetLong(p, "__requestId", 0)) : new List<object>();
+        if (includeText || includeShot)
+        {
+            Geometry now = ReadGeometry(h);
+            AssertGeometry(geometry, now);
+            if (now.Frame.Left != geometry.Frame.Left || now.Frame.Top != geometry.Frame.Top)
+                throw new ToolError("WINDOW_CHANGED", "the window moved during observation; take a fresh state");
+            _geometry[h.ToInt64()] = now;
+        }
         return result;
     }
 
-    Dictionary<string, object> BuildAccessibility(IntPtr h, long maxElements, int ttlMs)
+    Dictionary<string, object> BuildAccessibility(IntPtr h, long maxElements, int ttlMs, Dictionary<string, object> p)
     {
         Snapshot snap = new Snapshot();
         snap.WindowId = h.ToInt64();
         snap.At = DateTime.UtcNow;
+        snap.MaxDepth = (int)Math.Max(1, Math.Min(64, Json.GetLong(p, "max_depth", 25)));
+        snap.IncludeMenus = Json.GetBool(p, "include_menus", false);
+        snap.Details = Json.GetBool(p, "details", false);
 
         StringBuilder tree = new StringBuilder();
         int index = 0;
@@ -956,6 +1156,7 @@ public class WindowsDriver : IPlatformDriver
             // retry once after a short delay.
             System.Threading.Thread.Sleep(180);
             try { root = AutomationElement.FromHandle(h); } catch { }
+            snap.RuntimeIds.Clear();
             Walk(root, 0, maxElements, snap, tree, ref index, h, ref focused);
         }
 
@@ -965,48 +1166,42 @@ public class WindowsDriver : IPlatformDriver
         state["tree"] = tree.ToString();
         state["elementCount"] = (long)index;
         state["elements"] = snap.Summary;
+        state["hasUnreadableElements"] = snap.HasUnreadableElements;
 
         // Structured context Codex exposes beside the tree. Each is best-effort:
         // an app that does not implement the pattern simply omits the field.
         try
         {
-            AutomationElement doc = root.FindFirst(TreeScope.Descendants,
-                new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.Document));
-            if (doc != null)
-            {
-                object dp;
-                if (doc.TryGetCurrentPattern(TextPattern.Pattern, out dp))
-                {
-                    string body = ((TextPattern)dp).DocumentRange.GetText(8000);
-                    if (!string.IsNullOrEmpty(body)) state["document_text"] = body;
-                }
-            }
-            object focusPattern;
-            AutomationElement focusedElement = AutomationElement.FocusedElement;
-            if (focusedElement != null && focusedElement.TryGetCurrentPattern(TextPattern.Pattern, out focusPattern))
-            {
-                System.Windows.Automation.Text.TextPatternRange[] ranges = ((TextPattern)focusPattern).GetSelection();
-                if (ranges != null && ranges.Length > 0)
-                {
-                    string selected = ranges[0].GetText(4000);
-                    if (!string.IsNullOrEmpty(selected)) state["selected_text"] = selected;
-                }
-            }
-            Condition selectable = new PropertyCondition(AutomationElement.IsSelectionItemPatternAvailableProperty, true);
-            AutomationElementCollection selectedItems = root.FindAll(TreeScope.Descendants, selectable);
             List<object> selectedLines = new List<object>();
-            for (int i = 0; i < selectedItems.Count && selectedLines.Count < 20; i++)
+            foreach (AutomationElement element in snap.Elements.Values)
             {
                 try
                 {
+                    Budget.Check();
+                    AutomationElement.AutomationElementInformation info = element.Current;
+                    if (info.IsPassword) continue;
+                    object tp;
+                    if ((info.HasKeyboardFocus || (info.ControlType == ControlType.Document && !state.ContainsKey("document_text")))
+                        && element.TryGetCurrentPattern(TextPattern.Pattern, out tp))
+                    {
+                        TextPattern text = (TextPattern)tp;
+                        if (info.ControlType == ControlType.Document) state["document_text"] = text.DocumentRange.GetText(8000);
+                        if (info.HasKeyboardFocus)
+                        {
+                            System.Windows.Automation.Text.TextPatternRange[] ranges = text.GetSelection();
+                            if (ranges != null && ranges.Length > 0) state["selected_text"] = ranges[0].GetText(4000);
+                        }
+                    }
                     object sp;
-                    if (selectedItems[i].TryGetCurrentPattern(SelectionItemPattern.Pattern, out sp) && ((SelectionItemPattern)sp).Current.IsSelected)
-                        selectedLines.Add(SafeString(selectedItems[i].Current.Name) + " (" + SafeRole(selectedItems[i].Current) + ")");
+                    if (selectedLines.Count < 20 && element.TryGetCurrentPattern(SelectionItemPattern.Pattern, out sp) && ((SelectionItemPattern)sp).Current.IsSelected)
+                        selectedLines.Add(SafeString(info.Name) + " (" + SafeRole(info) + ")");
                 }
+                catch (ToolError) { throw; }
                 catch { }
             }
             if (selectedLines.Count > 0) state["selected_elements"] = selectedLines;
         }
+        catch (ToolError) { throw; }
         catch { }
         state["snapshotAt"] = snap.At.ToString("o");
         state["ttlMs"] = (long)ttlMs;
@@ -1019,20 +1214,28 @@ public class WindowsDriver : IPlatformDriver
         if (el == null) return;
         AutomationElementCollection kids;
         try { kids = el.FindAll(TreeScope.Children, Condition.TrueCondition); }
-        catch { return; }
+        catch
+        {
+            snap.HasUnreadableElements = true;
+            if (sb.Length > 0 && sb[sb.Length - 1] == '\n') sb.Insert(sb.Length - 1, " [unreadable children]");
+            return;
+        }
 
         for (int i = 0; i < kids.Count; i++)
         {
+            Budget.Check();
             if (index >= maxElements) return;
             AutomationElement k;
-            try { k = kids[i]; } catch { continue; }
+            try { k = kids[i]; } catch { snap.HasUnreadableElements = true; continue; }
             AutomationElement.AutomationElementInformation info;
             bool offscreen;
-            try { info = k.Current; offscreen = info.IsOffscreen; } catch { continue; }
+            try { info = k.Current; offscreen = info.IsOffscreen; } catch { snap.HasUnreadableElements = true; continue; }
             if (offscreen) continue;
             try
             {
 
+            int[] runtime = k.GetRuntimeId();
+            if (runtime != null && !snap.RuntimeIds.Add(string.Join(".", runtime))) continue;
             long idx = index++;
             snap.Elements[idx] = k;
 
@@ -1046,6 +1249,9 @@ public class WindowsDriver : IPlatformDriver
             summary["index"] = idx;
             summary["role"] = role;
             summary["name"] = name;
+            summary["depth"] = depth;
+            summary["focused"] = info.HasKeyboardFocus;
+            if (snap.Details) summary["automationId"] = SafeString(info.AutomationId);
             if (hasRect)
             {
                 summary["x"] = (int)rect.X;
@@ -1060,18 +1266,29 @@ public class WindowsDriver : IPlatformDriver
             if (hasRect) sb.Append(" @").Append((int)rect.X).Append(',').Append((int)rect.Y).Append(' ').Append((int)rect.Width).Append('x').Append((int)rect.Height);
 
             List<string> actions = ActionsOf(k);
+            summary["actions"] = actions;
+            if (snap.Details)
+            {
+                List<string> patterns = new List<string>();
+                foreach (AutomationPattern pattern in k.GetSupportedPatterns()) patterns.Add(pattern.ProgrammaticName);
+                summary["patterns"] = patterns;
+            }
             if (actions.Count > 0) sb.Append(" [").Append(string.Join(",", actions.ToArray())).Append(']');
 
             StringBuilder val = new StringBuilder();
             try
             {
                 object vp;
-                if (k.TryGetCurrentPattern(ValuePattern.Pattern, out vp))
+                object sp;
+                if (k.TryGetCurrentPattern(SelectionItemPattern.Pattern, out sp))
+                    summary["selected"] = ((SelectionItemPattern)sp).Current.IsSelected;
+                if (!info.IsPassword && k.TryGetCurrentPattern(ValuePattern.Pattern, out vp))
                 {
+                    summary["valueWritable"] = !((ValuePattern)vp).Current.IsReadOnly;
                     string v = ((ValuePattern)vp).Current.Value;
                     if (!string.IsNullOrEmpty(v)) val.Append(" value=\"").Append(Trim(v, 90)).Append('"');
                 }
-                else
+                else if (!info.IsPassword)
                 {
                     object tp;
                     if (k.TryGetCurrentPattern(TextPattern.Pattern, out tp))
@@ -1088,9 +1305,11 @@ public class WindowsDriver : IPlatformDriver
             catch { }
 
             sb.Append('\n');
-            if (depth < 18) Walk(k, depth + 1, maxElements, snap, sb, ref index, hwnd, ref focused);
+            if (depth + 1 < snap.MaxDepth && (snap.IncludeMenus || (role != "Menu" && role != "MenuBar")))
+                Walk(k, depth + 1, maxElements, snap, sb, ref index, hwnd, ref focused);
             }
-            catch (Exception) { continue; }
+            catch (ToolError) { throw; }
+            catch (Exception) { snap.HasUnreadableElements = true; }
         }
     }
 
@@ -1150,9 +1369,8 @@ public class WindowsDriver : IPlatformDriver
         return result;
     }
 
-    List<object> CaptureScreenshots(IntPtr h, out bool anyBlank)
+    List<object> CaptureScreenshots(IntPtr h, Dictionary<string, object> crop, long requestId)
     {
-        anyBlank = false;
         if (IsIconic(h))
             throw new ToolError("window_minimized", "window " + h.ToInt64() + " is minimized, so there is nothing to observe: call activate_window (or restore it) and observe again. A minimized window must never be captured, because the image would not be the window.");
         if (!IsWindowVisible(h))
@@ -1162,7 +1380,7 @@ public class WindowsDriver : IPlatformDriver
         List<object> shots = new List<object>();
         List<IntPtr> targets = new List<IntPtr>();
         targets.Add(h);
-        targets.AddRange(RelatedWindows(h));
+        if (crop == null) targets.AddRange(RelatedWindows(h));
 
         int total = Math.Max(1, order.Count);
         for (int i = 0; i < targets.Count; i++)
@@ -1170,17 +1388,18 @@ public class WindowsDriver : IPlatformDriver
             IntPtr w = targets[i];
             int zIndex = order.IndexOf(w);
             if (zIndex < 0) zIndex = total - 1;
-            Dictionary<string, object> shot = CaptureWindow(w);
+            Dictionary<string, object> shot = CaptureWindow(w, crop, requestId);
             shot["zIndex"] = (long)(total - zIndex); // larger = visually above
             string id = "shot-" + _shotGeneration + "-" + (++_shotSeq).ToString() + "-" + w.ToInt64().ToString();
             shot["id"] = id;
-            RECT r = BoundsOf(w);
+            Geometry geometry = ReadGeometry(w);
             lock (_sync)
             {
                 PruneShots();
                 _shots[id] = new ShotRegion
                 {
-                    WindowId = h.ToInt64(), OriginX = r.Left, OriginY = r.Top,
+                    WindowId = h.ToInt64(), Surface = w, Geometry = geometry,
+                    OriginX = (int)ToLong(shot["originX"]), OriginY = (int)ToLong(shot["originY"]),
                     Width = (int)ToLong(shot["width"]), Height = (int)ToLong(shot["height"]),
                     ScaleX = ToDouble(shot["scaleX"]), ScaleY = ToDouble(shot["scaleY"]),
                     At = DateTime.UtcNow,
@@ -1223,20 +1442,18 @@ public class WindowsDriver : IPlatformDriver
     static void AssertPointInsideShot(double x, double y, ShotRegion region, string screenshotId, string what)
     {
         if (double.IsNaN(x) || double.IsNaN(y)) return;
-        if (x >= 0 && y >= 0 && x <= region.Width && y <= region.Height) return;
+        if (x >= 0 && y >= 0 && x < region.Width && y < region.Height) return;
         throw new ToolError("point_outside_screenshot",
             what + " (" + x.ToString("0.##") + ", " + y.ToString("0.##") + ") is outside screenshot bounds (0,0)-(" +
             region.Width + "," + region.Height + ") for '" + screenshotId + "'. Take a fresh screenshot with get_window_state before retrying.");
     }
 
-    /// Windows.Graphics.Capture through the .NET 8 helper: composed window content,
-    /// occlusion-proof, no DPI halo. Falls back to PrintWindow/screen when absent.
+    /// Windows.Graphics.Capture via the optional .NET Framework helper.
     static Bitmap TryCaptureWithWgc(IntPtr hwnd)
     {
         try
         {
-            string dir = Path.GetDirectoryName(typeof(WindowsDriver).Assembly.Location) ?? ".";
-            string exe = Path.Combine(dir, "capture", "dsh-cu-capture.exe");
+            string exe = ComponentPath("capture", "dsh-cu-capture.exe");
             if (!File.Exists(exe)) return null;
             string tmp = Path.Combine(Path.GetTempPath(), "dsh-cu-wgc-" + Guid.NewGuid().ToString("N") + ".png");
             try
@@ -1251,7 +1468,16 @@ public class WindowsDriver : IPlatformDriver
                 using (Process p = Process.Start(psi))
                 {
                     if (p == null) return null;
-                    if (!p.WaitForExit(waitMs + 900)) { try { p.Kill(); } catch { } return null; }
+                    try
+                    {
+                        Stopwatch wait = Stopwatch.StartNew();
+                        while (!p.WaitForExit(40))
+                        {
+                            Budget.Check();
+                            if (wait.ElapsedMilliseconds > waitMs + 450) return null;
+                        }
+                    }
+                    finally { if (!p.HasExited) { try { p.Kill(); } catch { } } }
                     if (p.ExitCode != 0 || !File.Exists(tmp)) return null;
                     byte[] bytes = File.ReadAllBytes(tmp);
                     using (MemoryStream ms = new MemoryStream(bytes)) return new Bitmap(ms);
@@ -1259,118 +1485,141 @@ public class WindowsDriver : IPlatformDriver
             }
             finally { try { if (File.Exists(tmp)) File.Delete(tmp); } catch { } }
         }
+        catch (ToolError) { throw; }
         catch { return null; }
     }
 
-    Dictionary<string, object> CaptureWindow(IntPtr h)
+    Dictionary<string, object> CaptureWindow(IntPtr h, Dictionary<string, object> crop, long requestId)
     {
-        RECT r = BoundsOf(h);
-        int w = Math.Max(1, r.Right - r.Left);
-        int ht = Math.Max(1, r.Bottom - r.Top);
-        // Cap pathological sizes so a maximised multi-monitor window cannot blow the
-        // attachment byte budget.
-        const int cap = 2560;
-        double scale = 1.0;
-        if (w > cap || ht > cap)
+        Stopwatch clock = Stopwatch.StartNew();
+        Dictionary<string, object> stages = new Dictionary<string, object>();
+        Dictionary<string, object> diagnostic = new Dictionary<string, object> { { "requestId", requestId }, { "stages", stages } };
+        Bitmap bitmap = null;
+        try
         {
-            scale = Math.Min((double)cap / w, (double)cap / ht);
-            w = Math.Max(1, (int)(w * scale));
-            ht = Math.Max(1, (int)(ht * scale));
+            RECT r = BoundsOf(h);
+            int frameWidth = r.Right - r.Left, frameHeight = r.Bottom - r.Top;
+            if (frameWidth <= 0 || frameHeight <= 0 || frameWidth > 16384 || frameHeight > 16384
+                || (long)frameWidth * frameHeight > 24000000)
+                throw new ToolError("capture_bounds", "the window bounds exceed the native capture budget");
+            Rectangle wanted = GetCrop(crop, frameWidth, frameHeight);
+            stages["geometryCheckMs"] = clock.ElapsedMilliseconds;
+            clock.Restart();
+            diagnostic["originalSize"] = new int[] { frameWidth, frameHeight };
+            stages["backend"] = "wgc";
+            bitmap = TryCaptureWithWgc(h);
+            bool printed = bitmap != null;
+            if (bitmap == null)
+            {
+                stages["backend"] = "PrintWindow";
+                bitmap = new Bitmap(frameWidth, frameHeight, PixelFormat.Format24bppRgb);
+                using (Graphics graphics = Graphics.FromImage(bitmap))
+                {
+                    IntPtr dc = graphics.GetHdc();
+                    try { printed = PrintWindow(h, dc, 2); }
+                    finally { graphics.ReleaseHdc(dc); }
+                }
+                if (!printed || IsBlank(bitmap))
+                {
+                    stages["backend"] = "BitBlt";
+                    bitmap.Dispose();
+                    bitmap = CaptureVisibleWindow(h, r, frameWidth, frameHeight);
+                    printed = false;
+                }
+                else
+                {
+                    // DPI-virtualized PrintWindow renders can leave black padding.
+                    Rectangle painted = PaintedBounds(bitmap);
+                    if (painted.Width > 16 && painted.Height > 16 && (painted.Width < bitmap.Width || painted.Height < bitmap.Height))
+                    {
+                        Bitmap trimmed = bitmap.Clone(new Rectangle(0, 0, painted.Right, painted.Bottom), bitmap.PixelFormat);
+                        bitmap.Dispose();
+                        bitmap = trimmed;
+                    }
+                }
+            }
+            stages["captureMs"] = clock.ElapsedMilliseconds;
+            Budget.Check();
+            clock.Restart();
+            double ratioX = (double)bitmap.Width / frameWidth, ratioY = (double)bitmap.Height / frameHeight;
+            int left = (int)Math.Floor(wanted.Left * ratioX), top = (int)Math.Floor(wanted.Top * ratioY);
+            int right = (int)Math.Ceiling(wanted.Right * ratioX), bottom = (int)Math.Ceiling(wanted.Bottom * ratioY);
+            int rawWidth = right - left, rawHeight = bottom - top;
+            double limit = Math.Min(1.0, 2560.0 / Math.Max(rawWidth, rawHeight));
+            int width = Math.Max(1, (int)(rawWidth * limit)), height = Math.Max(1, (int)(rawHeight * limit));
+            using (Bitmap delivered = new Bitmap(width, height, PixelFormat.Format24bppRgb))
+            using (Graphics graphics = Graphics.FromImage(delivered))
+            using (MemoryStream output = new MemoryStream())
+            {
+                graphics.DrawImage(bitmap, new Rectangle(0, 0, width, height),
+                    new Rectangle(left, top, rawWidth, rawHeight), GraphicsUnit.Pixel);
+                delivered.Save(output, ImageFormat.Png);
+                stages["encodePngMs"] = clock.ElapsedMilliseconds;
+                diagnostic["deliveredSize"] = new int[] { width, height };
+                return new Dictionary<string, object> {
+                    { "mediaType", "image/png" }, { "base64", Convert.ToBase64String(output.ToArray()) },
+                    { "width", width }, { "height", height }, { "originX", r.Left + wanted.Left },
+                    { "originY", r.Top + wanted.Top }, { "printed", printed },
+                    { "scaleX", (double)wanted.Width / width }, { "scaleY", (double)wanted.Height / height },
+                    { "diagnostic", diagnostic }
+                };
+            }
         }
-
-        Bitmap wgc = TryCaptureWithWgc(h);
-        if (wgc != null)
+        catch (Exception error)
         {
-            Dictionary<string, object> wg = FinishShot(h, wgc, r, true, 1.0, 1.0);
-            return wg;
+            stages["elapsedMs"] = clock.ElapsedMilliseconds;
+            ToolError native = error as ToolError;
+            throw new ToolError(native != null ? native.Code : "capture_failed",
+                (native != null ? native.Message : "native window capture failed") + " [cua-screenshot] " + Json.ToJson(diagnostic));
         }
-
-        Bitmap bmp = new Bitmap(w, ht, PixelFormat.Format24bppRgb);
-        bool printed = false;
-        using (Graphics g = Graphics.FromImage(bmp))
-        {
-            IntPtr hdc = g.GetHdc();
-            try { printed = PrintWindow(h, hdc, 2); }
-            finally { g.ReleaseHdc(hdc); }
-        }
-        if (!printed || IsBlank(bmp))
-        {
-            bmp.Dispose();
-            bmp = CaptureFromScreen(r, w, ht);
-        }
-
-        // DPI-virtualized targets render at their own (usually 96 DPI) size while
-        // occupying a larger physical rect, so PrintWindow leaves a black halo.
-        // Crop to the painted region and remember the physical/screenshot ratio so
-        // coordinate actions can map screenshot pixels back to screen pixels.
-        int fullWidth = bmp.Width, fullHeight = bmp.Height;
-        Rectangle painted = PaintedBounds(bmp);
-        if (painted.Width > 16 && painted.Height > 16 && (painted.Width < bmp.Width || painted.Height < bmp.Height))
-        {
-            Bitmap cropped = bmp.Clone(new Rectangle(0, 0, painted.Right, painted.Bottom), bmp.PixelFormat);
-            bmp.Dispose();
-            bmp = cropped;
-            w = bmp.Width;
-            ht = bmp.Height;
-        }
-        double scaleX = (double)fullWidth / Math.Max(1, bmp.Width);
-        double scaleY = (double)fullHeight / Math.Max(1, bmp.Height);
-
-        byte[] png;
-        using (MemoryStream ms = new MemoryStream())
-        {
-            bmp.Save(ms, ImageFormat.Png);
-            png = ms.ToArray();
-        }
-        bmp.Dispose();
-
-        Dictionary<string, object> d = new Dictionary<string, object>();
-        d["mediaType"] = "image/png";
-        d["base64"] = Convert.ToBase64String(png);
-        d["width"] = (long)w;
-        d["height"] = (long)ht;
-        d["originX"] = (long)r.Left;
-        d["originY"] = (long)r.Top;
-        d["zIndex"] = 1L;
-        d["printed"] = printed;
-        d["scaleX"] = scaleX;
-        d["scaleY"] = scaleY;
-        return d;
+        finally { if (bitmap != null) bitmap.Dispose(); }
     }
 
-    static Dictionary<string, object> FinishShot(IntPtr h, Bitmap bmp, RECT r, bool printed, double scaleX, double scaleY)
+    static Rectangle GetCrop(Dictionary<string, object> crop, int width, int height)
     {
-        int w = bmp.Width, ht = bmp.Height;
-        byte[] png;
-        using (MemoryStream ms = new MemoryStream())
-        {
-            bmp.Save(ms, ImageFormat.Png);
-            png = ms.ToArray();
-        }
-        bmp.Dispose();
-        Dictionary<string, object> d = new Dictionary<string, object>();
-        d["mediaType"] = "image/png";
-        d["base64"] = Convert.ToBase64String(png);
-        d["width"] = (long)w;
-        d["height"] = (long)ht;
-        d["originX"] = (long)r.Left;
-        d["originY"] = (long)r.Top;
-        d["zIndex"] = 1L;
-        d["printed"] = printed;
-        d["scaleX"] = scaleX;
-        d["scaleY"] = scaleY;
-        return d;
+        if (crop == null) return new Rectangle(0, 0, width, height);
+        long x = Json.GetLong(crop, "x", -1), y = Json.GetLong(crop, "y", -1);
+        long w = Json.GetLong(crop, "width", -1), h = Json.GetLong(crop, "height", -1);
+        if (x < 0 || y < 0 || w < 1 || h < 1 || w > width || h > height || x > width - w || y > height - h)
+            throw new ToolError("bad_request", "screenshot region must be inside the window");
+        return new Rectangle((int)x, (int)y, (int)w, (int)h);
     }
 
-    static Bitmap CaptureFromScreen(RECT r, int w, int ht)
+    Bitmap CaptureVisibleWindow(IntPtr h, RECT frame, int width, int height)
     {
-        Bitmap bmp = new Bitmap(w, ht, PixelFormat.Format24bppRgb);
-        using (Graphics g = Graphics.FromImage(bmp))
+        StopOverlay();
+        foreach (IntPtr other in EnumerateWindows(true))
         {
-            try { g.CopyFromScreen(r.Left, r.Top, 0, 0, new Size(w, ht), CopyPixelOperation.SourceCopy); }
-            catch { }
+            if (other == h) break;
+            if (IsIconic(other)) continue;
+            RECT r = BoundsOf(other);
+            if (r.Left < frame.Right && frame.Left < r.Right && r.Top < frame.Bottom && frame.Top < r.Bottom)
+                throw new ToolError("capture_occluded", "window capture needs an unobstructed target when using the BitBlt fallback");
         }
-        return bmp;
+        IntPtr source = GetWindowDC(h);
+        if (source == IntPtr.Zero) throw new ToolError("capture_failed", "the window device context could not be opened");
+        try
+        {
+            RECT window;
+            if (!GetWindowRect(h, out window)) throw new ToolError("window_gone", "the target window closed");
+            Bitmap bitmap = new Bitmap(width, height, PixelFormat.Format24bppRgb);
+            try
+            {
+                using (Graphics graphics = Graphics.FromImage(bitmap))
+                {
+                    IntPtr dest = graphics.GetHdc();
+                    try
+                    {
+                        if (!BitBlt(dest, 0, 0, width, height, source, frame.Left - window.Left, frame.Top - window.Top, 0x00CC0020))
+                            throw new ToolError("capture_failed", "BitBlt failed for the target window");
+                    }
+                    finally { graphics.ReleaseHdc(dest); }
+                }
+                return bitmap;
+            }
+            catch { bitmap.Dispose(); throw; }
+        }
+        finally { ReleaseDC(h, source); }
     }
 
     /// Bounding box of everything that is not uniform black, i.e. the region the
@@ -1453,7 +1702,8 @@ public class WindowsDriver : IPlatformDriver
         inp.u.mi.mouseData = (uint)data;
         inp.u.mi.dwFlags = flags;
         INPUT[] arr = new INPUT[] { inp };
-        SendInput(1, arr, Marshal.SizeOf(typeof(INPUT)));
+        if (SendInput(1, arr, Marshal.SizeOf(typeof(INPUT))) != 1)
+            throw new ToolError("input_rejected", "Windows rejected the mouse input");
     }
 
     static void KeyDown(ushort vk) { SendKey(vk, 0, 0); }
@@ -1481,20 +1731,133 @@ public class WindowsDriver : IPlatformDriver
         SendInput(1, arr, Marshal.SizeOf(typeof(INPUT)));
     }
 
-    void ClickAt(int screenX, int screenY, int count, string button, Dictionary<string, object> p)
+    sealed class PointerTarget
     {
-        SetCursorPos(screenX, screenY);
-        System.Threading.Thread.Sleep(35);
-        for (int i = 0; i < Math.Max(1, count); i++)
+        public POINT Point;
+        public IntPtr Surface;
+    }
+
+    static int RelativeOffset(double coord, int size)
+    {
+        if (!(coord >= 0 && coord <= 999 && Math.Truncate(coord) == coord) || size <= 0)
+            throw new ToolError("bad_request", "relative coordinates must be integers from 0 to 999");
+        return Math.Min(size - 1, (int)Math.Floor(coord * size / 1000.0 + 0.5));
+    }
+
+    PointerTarget ResolvePoint(IntPtr h, Dictionary<string, object> p, string xKey, string yKey)
+    {
+        Geometry now = ReadGeometry(h);
+        Geometry before;
+        bool observed = _geometry.TryGetValue(h.ToInt64(), out before);
+        if (observed)
+        {
+            AssertGeometry(before, now);
+            if ((DateTime.UtcNow - before.At).TotalMilliseconds > _shotTtlMs)
+                throw new ToolError("fresh_observation_required", "the coordinate observation expired");
+        }
+        double x = Json.GetDouble(p, xKey, double.NaN), y = Json.GetDouble(p, yKey, double.NaN);
+        if (Json.GetBool(p, "relative", false))
+        {
+            if (!observed) throw new ToolError("SCREENSHOT_REQUIRED", "observe the window before using relative coordinates");
+            return new PointerTarget { Surface = h, Point = new POINT {
+                X = now.Client.Left + RelativeOffset(x, now.Client.Right - now.Client.Left),
+                Y = now.Client.Top + RelativeOffset(y, now.Client.Bottom - now.Client.Top)
+            } };
+        }
+        if (double.IsNaN(x) || double.IsNaN(y))
+            throw new ToolError("bad_request", "the pointer action needs finite window or screenshot coordinates");
+        string id = Json.GetString(p, "screenshotId");
+        if (!string.IsNullOrEmpty(id))
+        {
+            ShotRegion shot = ResolveShot(h, id);
+            AssertPointInsideShot(x, y, shot, id, "pointer");
+            if (!IsWindow(shot.Surface) || !IsWindowVisible(shot.Surface))
+                throw new ToolError("WINDOW_CHANGED", "the screenshot surface is no longer visible");
+            Geometry surface = ReadGeometry(shot.Surface);
+            AssertGeometry(shot.Geometry, surface);
+            return new PointerTarget { Surface = shot.Surface, Point = new POINT {
+                X = shot.OriginX + surface.Frame.Left - shot.Geometry.Frame.Left + (int)Math.Round(x * shot.ScaleX),
+                Y = shot.OriginY + surface.Frame.Top - shot.Geometry.Frame.Top + (int)Math.Round(y * shot.ScaleY)
+            } };
+        }
+        if (x < 0 || y < 0 || x >= now.Frame.Right - now.Frame.Left || y >= now.Frame.Bottom - now.Frame.Top)
+            throw new ToolError("point_outside_window", "pointer coordinates are outside the target window");
+        return new PointerTarget { Surface = h, Point = new POINT {
+            X = now.Frame.Left + (int)Math.Round(x), Y = now.Frame.Top + (int)Math.Round(y)
+        } };
+    }
+
+    static void AssertPointOwner(IntPtr target, POINT point, string code)
+    {
+        // UIA bounds and screenshot pixels use physical screen coordinates.
+        IntPtr hit;
+        try { hit = WindowFromPhysicalPoint(point); }
+        catch (EntryPointNotFoundException) { hit = WindowFromPoint(point); }
+        IntPtr root = hit == IntPtr.Zero ? hit : GetAncestor(hit, 2); // GA_ROOT
+        if (root != target)
+            throw new ToolError(code, "the pointer point (" + point.X + ", " + point.Y + ") is not owned by the selected window (surface: " + ProcessNameOf(PidOf(root)) + ")");
+    }
+
+    void MovePointer(IntPtr target, POINT point, string errorCode)
+    {
+        AssertPointOwner(target, point, errorCode);
+        if (!SetPhysicalCursorPos(point.X, point.Y)) throw new ToolError("pointer_failed", "Windows rejected the pointer move");
+        MarkCursor(point.X, point.Y);
+    }
+
+    static void AssertPointerReady(IntPtr window, PointerTarget target)
+    {
+        POINT current;
+        if (GetForegroundWindow() != window || !GetPhysicalCursorPos(out current)
+            || current.X != target.Point.X || current.Y != target.Point.Y)
+            throw new ToolError("focus_failed", "the foreground or pointer changed before the action");
+        AssertPointOwner(target.Surface, current, "pointer_intercepted_by_foreign_window");
+    }
+
+    static List<ushort> Modifiers(Dictionary<string, object> p)
+    {
+        List<ushort> keys = new List<ushort>();
+        List<object> values = Json.Get(p, "modifiers") as List<object>;
+        if (values == null) return keys;
+        foreach (object value in values)
+        {
+            string candidate = Convert.ToString(value).ToLowerInvariant();
+            if (DeniedKeys.Contains(candidate)) throw new ToolError("hard_denied", "the Windows key family is hard-denied");
+            ushort key;
+            switch (candidate)
+            {
+                case "ctrl": case "control": key = 0x11; break;
+                case "alt": key = 0x12; break;
+                case "shift": key = 0x10; break;
+                default: throw new ToolError("bad_key", "unsupported modifier");
+            }
+            if (!keys.Contains(key)) keys.Add(key);
+        }
+        return keys;
+    }
+
+    static bool IsDown(int key) { return (GetAsyncKeyState(key) & 0x8000) != 0; }
+
+    static bool ReleaseModifiers(List<ushort> pressed)
+    {
+        for (int i = pressed.Count - 1; i >= 0; i--) SendVk(pressed[i], true);
+        bool released = true;
+        foreach (ushort key in pressed)
+        {
+            if (!IsDown(key)) continue;
+            SendVk(key, true);
+            released &= !IsDown(key);
+        }
+        return released;
+    }
+
+    void Hold(int milliseconds, Dictionary<string, object> p)
+    {
+        Stopwatch clock = Stopwatch.StartNew();
+        while (clock.ElapsedMilliseconds < milliseconds)
         {
             CheckCancel(p);
-            if (i > 0) System.Threading.Thread.Sleep(60);
-            uint down = MOUSEEVENTF_LEFTDOWN, up = MOUSEEVENTF_LEFTUP;
-            if (button == "r") { down = MOUSEEVENTF_RIGHTDOWN; up = MOUSEEVENTF_RIGHTUP; }
-            else if (button == "m") { down = MOUSEEVENTF_MIDDLEDOWN; up = MOUSEEVENTF_MIDDLEUP; }
-            SendMouse(down);
-            try { System.Threading.Thread.Sleep(22); }
-            finally { SendMouse(up); }
+            System.Threading.Thread.Sleep((int)Math.Max(1, Math.Min(20, milliseconds - clock.ElapsedMilliseconds)));
         }
     }
 
@@ -1502,72 +1865,107 @@ public class WindowsDriver : IPlatformDriver
     {
         CheckCancel(p);
         AssertUnlocked();
-        EnsureOverlay(8000);
         IntPtr h = ResolveWindow(p);
         AssertAppApproved(h);
-        long elementIndex = Json.GetLong(p, "element_index", -1);
-        string button = NormalizeButton(Json.GetString(p, "mouse_button"));
-        int count = (int)Json.GetLong(p, "click_count", 1);
-        int sx, sy;
-
-        if (elementIndex >= 0)
+        long index = Json.GetLong(p, "element_index", -1);
+        string button = NormalizeButton(Json.GetString(p, "mouse_button") ?? Json.GetString(p, "mouseButton"));
+        int count = (int)Json.GetLong(p, "click_count", Json.GetLong(p, "clickCount", 1));
+        int hold = (int)Json.GetLong(p, "holdMs", 0);
+        if (count < 1 || count > 3 || hold < 0 || hold > _maxClickHoldMs)
+            throw new ToolError("bad_request", "click count or hold duration is outside the allowed range");
+        List<ushort> modifiers = Modifiers(p);
+        AutomationElement element = index >= 0 ? ElementAt(h, index) : null;
+        object invoke;
+        if (element != null && count == 1 && button == "l" && hold == 0 && modifiers.Count == 0
+            && element.TryGetCurrentPattern(InvokePattern.Pattern, out invoke))
         {
-            AutomationElement el = ElementAt(h, elementIndex);
-            Dictionary<string, object> t = ScreenshotTarget(h, el);
-            sx = (int)t["screenX"]; sy = (int)t["screenY"];
-            // Prefer the semantic invoke when the element exposes one and we are
-            // doing a plain left single click: it survives occlusion and does not
-            // depend on pixel geometry.
-            if (count == 1 && button == "l")
-            {
-                object pattern;
-                try
-                {
-                    if (el.TryGetCurrentPattern(InvokePattern.Pattern, out pattern))
-                    {
-                        ((InvokePattern)pattern).Invoke();
-                        Dictionary<string, object> r2 = new Dictionary<string, object>();
-                        r2["clicked"] = "invoke"; r2["element_index"] = elementIndex;
-                        return r2;
-                    }
-                }
-                catch (Exception) { }
-            }
-        }
-        else
-        {
-            double x = Json.GetDouble(p, "x", double.NaN);
-            double y = Json.GetDouble(p, "y", double.NaN);
-            if (double.IsNaN(x) || double.IsNaN(y)) throw new ToolError("bad_request", "click needs either 'element_index' or both 'x' and 'y' (window-relative pixels)");
-            string screenshotId = Json.GetString(p, "screenshotId");
-            int originX, originY;
-            double coordScaleX = 1.0, coordScaleY = 1.0;
-            if (!string.IsNullOrEmpty(screenshotId))
-            {
-                ShotRegion region = ResolveShot(h, screenshotId);
-                AssertPointInsideShot(x, y, region, screenshotId, "click");
-                originX = region.OriginX; originY = region.OriginY;
-                coordScaleX = region.ScaleX; coordScaleY = region.ScaleY;
-            }
-            else
-            {
-                RECT bounds = BoundsOf(h);
-                originX = bounds.Left; originY = bounds.Top;
-            }
-            sx = originX + (int)Math.Round(x * coordScaleX);
-            sy = originY + (int)Math.Round(y * coordScaleY);
+            CheckCancel(p);
+            EnsureOverlay(8000);
+            ((InvokePattern)invoke).Invoke();
+            return new Dictionary<string, object> { { "clicked", "invoke" }, { "element_index", index } };
         }
 
-        Activate(h); // pointer clicks need a real foreground window
-        MarkCursor(sx, sy);
+        if (element == null) ResolvePoint(h, p, "x", "y");
+        Activate(h);
+        ResolveWindow(p);
+        PointerTarget target = element == null ? ResolvePoint(h, p, "x", "y") : ResolveElementPoint(h, element);
+        EnsureOverlay(Math.Max(8000, hold * count + 1000));
         CheckCancel(p);
-        ClickAt(sx, sy, count, button, p);
-        Dictionary<string, object> r = new Dictionary<string, object>();
-        r["clicked"] = "pointer";
-        r["screenX"] = (long)sx;
-        r["screenY"] = (long)sy;
-        r["clickCount"] = (long)count;
-        return r;
+        MovePointer(target.Surface, target.Point, "pointer_intercepted_by_foreign_window");
+        uint down = MOUSEEVENTF_LEFTDOWN, up = MOUSEEVENTF_LEFTUP;
+        int buttonKey = 1;
+        if (button == "r") { down = MOUSEEVENTF_RIGHTDOWN; up = MOUSEEVENTF_RIGHTUP; buttonKey = 2; }
+        if (button == "m") { down = MOUSEEVENTF_MIDDLEDOWN; up = MOUSEEVENTF_MIDDLEUP; buttonKey = 4; }
+        List<ushort> pressed = new List<ushort>();
+        bool mouseReleased = true, keysReleased = true;
+        try
+        {
+            Hold(35, p);
+            AssertPointerReady(h, target);
+            foreach (ushort key in modifiers)
+                if (!IsDown(key)) { SendVk(key, false); pressed.Add(key); }
+            for (int i = 0; i < count; i++)
+            {
+                if (i > 0) Hold(60, p);
+                CheckCancel(p);
+                AssertPointerReady(h, target);
+                if (IsDown(buttonKey)) throw new ToolError("input_busy", "the mouse button is already held");
+                SendMouse(down);
+                try { Hold(hold == 0 ? 22 : hold, p); }
+                finally
+                {
+                    mouseReleased &= ReleaseMouse(up, buttonKey);
+                }
+            }
+        }
+        finally { keysReleased = ReleaseModifiers(pressed); }
+        return new Dictionary<string, object> {
+            { "clicked", "pointer" }, { "screenX", target.Point.X }, { "screenY", target.Point.Y },
+            { "clickCount", count }, { "releaseVerified", mouseReleased && keysReleased }
+        };
+    }
+
+    static PointerTarget ResolveElementPoint(IntPtr h, AutomationElement element)
+    {
+        Dictionary<string, object> target = ScreenshotTarget(h, element);
+        return new PointerTarget { Surface = h, Point = new POINT { X = (int)target["screenX"], Y = (int)target["screenY"] } };
+    }
+
+    static bool ReleaseMouse(uint flags, int key)
+    {
+        try { SendMouse(flags); } catch (ToolError) { /* retry after sampling the key */ }
+        System.Threading.Thread.Sleep(10);
+        if (IsDown(key))
+        {
+            try { SendMouse(flags); } catch (ToolError) { return false; }
+            System.Threading.Thread.Sleep(10);
+        }
+        return !IsDown(key) && !DesktopLocked();
+    }
+
+    public Dictionary<string, object> MouseMove(Dictionary<string, object> p)
+    {
+        CheckCancel(p);
+        AssertUnlocked();
+        IntPtr h = ResolveWindow(p);
+        AssertAppApproved(h);
+        long index = Json.GetLong(p, "element_index", -1);
+        AutomationElement element = index >= 0 ? ElementAt(h, index) : null;
+        bool physical = Json.GetBool(p, "useSystemPointer", false);
+        PointerTarget target = element == null ? ResolvePoint(h, p, "x", "y") : ResolveElementPoint(h, element);
+        if (physical)
+        {
+            Activate(h);
+            ResolveWindow(p);
+            target = element == null ? ResolvePoint(h, p, "x", "y") : ResolveElementPoint(h, element);
+            EnsureOverlay(8000);
+            CheckCancel(p);
+            MovePointer(target.Surface, target.Point, "pointer_intercepted_by_foreign_window");
+        }
+        return new Dictionary<string, object> {
+            { "dispatched", physical }, { "hoverRoute", physical ? "system-pointer" : "accessibility" },
+            { "systemPointerMoved", physical }, { "screenX", target.Point.X }, { "screenY", target.Point.Y }
+        };
     }
 
     static string NormalizeButton(string b)
@@ -1583,13 +1981,14 @@ public class WindowsDriver : IPlatformDriver
     {
         CheckCancel(p);
         AssertUnlocked();
-        EnsureOverlay(8000);
         IntPtr h = ResolveWindow(p);
         AssertAppApproved(h);
         string key = Json.GetString(p, "key");
         if (string.IsNullOrEmpty(key)) throw new ToolError("bad_request", "press_key requires 'key'");
         Activate(h);
-        Chord(key, p);
+        ResolveWindow(p);
+        EnsureOverlay(8000);
+        Chord(h, key, p);
         Dictionary<string, object> r = new Dictionary<string, object>();
         r["pressed"] = key;
         return r;
@@ -1647,7 +2046,7 @@ public class WindowsDriver : IPlatformDriver
         SendKey(vk, 0, flags);
     }
 
-    void Chord(string chord, Dictionary<string, object> p)
+    void Chord(IntPtr h, string chord, Dictionary<string, object> p)
     {
         string[] parts = chord.Split('+');
         List<ushort> keys = new List<ushort>();
@@ -1664,6 +2063,7 @@ public class WindowsDriver : IPlatformDriver
             for (int i = 0; i < keys.Count; i++)
             {
                 CheckCancel(p);
+                AssertForegroundInput(h);
                 SendVk(keys[i], false); pressed++;
                 System.Threading.Thread.Sleep(12);
             }
@@ -1697,19 +2097,26 @@ public class WindowsDriver : IPlatformDriver
 
     [DllImport("user32.dll")] static extern short VkKeyScan(char ch);
 
+    static void AssertForegroundInput(IntPtr h)
+    {
+        if (GetForegroundWindow() != h) throw new ToolError("focus_failed", "the selected window lost foreground input");
+    }
+
     public Dictionary<string, object> TypeText(Dictionary<string, object> p)
     {
         CheckCancel(p);
         AssertUnlocked();
-        EnsureOverlay(8000);
         IntPtr h = ResolveWindow(p);
         AssertAppApproved(h);
         string text = Json.GetString(p, "text");
         if (text == null) throw new ToolError("bad_request", "type_text requires 'text'");
         Activate(h);
+        ResolveWindow(p);
+        EnsureOverlay(8000);
         for (int i = 0; i < text.Length; i++)
         {
             CheckCancel(p);
+            AssertForegroundInput(h);
             char c = text[i];
             if (c == '\n') { SendVk(0x0D, false); SendVk(0x0D, true); continue; }
             if (c == '\t') { SendVk(0x09, false); SendVk(0x09, true); continue; }
@@ -1727,45 +2134,27 @@ public class WindowsDriver : IPlatformDriver
     {
         CheckCancel(p);
         AssertUnlocked();
-        EnsureOverlay(8000);
         IntPtr h = ResolveWindow(p);
         AssertAppApproved(h);
         // Validation first: an invalid call must not activate a window or move the pointer.
         double scrollY = Json.GetDouble(p, "scrollY", 0);
         double scrollX = Json.GetDouble(p, "scrollX", 0);
-        double x = Json.GetDouble(p, "x", double.NaN);
-        double y = Json.GetDouble(p, "y", double.NaN);
-        if (double.IsNaN(x) || double.IsNaN(y))
-            throw new ToolError("bad_request", "scroll requires finite 'x' and 'y' (the point to scroll from, in window/screenshot coordinates); click a pane first if it needs focus");
         if (Math.Abs(scrollX) < 0.0001 && Math.Abs(scrollY) < 0.0001)
             throw new ToolError("bad_request", "scroll requires a non-zero scrollX or scrollY");
+        ResolvePoint(h, p, "x", "y");
         Activate(h);
-        int sx, sy;
-        string scrollShot = Json.GetString(p, "screenshotId");
-        int originLeft, originTop;
-        double scrollScaleX = 1.0, scrollScaleY = 1.0;
-        if (!string.IsNullOrEmpty(scrollShot))
-        {
-            ShotRegion region = ResolveShot(h, scrollShot);
-            AssertPointInsideShot(x, y, region, scrollShot, "scroll origin");
-            originLeft = region.OriginX; originTop = region.OriginY;
-            scrollScaleX = region.ScaleX; scrollScaleY = region.ScaleY;
-        }
-        else
-        {
-            RECT b = BoundsOf(h);
-            originLeft = b.Left; originTop = b.Top;
-        }
-        sx = originLeft + (int)Math.Round(x * scrollScaleX);
-        sy = originTop + (int)Math.Round(y * scrollScaleY);
-        MarkCursor(sx, sy);
-        SetCursorPos(sx, sy);
-        System.Threading.Thread.Sleep(40);
+        ResolveWindow(p);
+        PointerTarget target = ResolvePoint(h, p, "x", "y");
+        EnsureOverlay(8000);
+        CheckCancel(p);
+        MovePointer(target.Surface, target.Point, "pointer_intercepted_by_foreign_window");
+        Hold(40, p);
+        AssertPointerReady(h, target);
         if (Math.Abs(scrollY) > 0.0001) SendMouseData(MOUSEEVENTF_WHEEL, (int)(-scrollY * 120));
         if (Math.Abs(scrollX) > 0.0001) SendMouseData(MOUSEEVENTF_HWHEEL, (int)(-scrollX * 120));
         Dictionary<string, object> r = new Dictionary<string, object>();
         r["scrolled"] = true;
-        r["screenX"] = (long)sx; r["screenY"] = (long)sy;
+        r["screenX"] = target.Point.X; r["screenY"] = target.Point.Y;
         return r;
     }
 
@@ -1773,63 +2162,65 @@ public class WindowsDriver : IPlatformDriver
     {
         CheckCancel(p);
         AssertUnlocked();
-        EnsureOverlay(8000);
         IntPtr h = ResolveWindow(p);
         AssertAppApproved(h);
-        double fromX = Json.GetDouble(p, "from_x", double.NaN);
-        double fromY = Json.GetDouble(p, "from_y", double.NaN);
-        double toX = Json.GetDouble(p, "to_x", double.NaN);
-        double toY = Json.GetDouble(p, "to_y", double.NaN);
-        if (double.IsNaN(fromX) || double.IsNaN(fromY) || double.IsNaN(toX) || double.IsNaN(toY))
-            throw new ToolError("bad_request", "drag requires finite from_x/from_y/to_x/to_y (window-relative pixels)");
+        if (!Json.GetBool(p, "useSystemPointer", true))
+            throw new ToolError("ACCESSIBILITY_DRAG_UNAVAILABLE", "Windows UI Automation has no generic drag action; request the system pointer");
+        List<ushort> modifiers = Modifiers(p);
+        ResolvePoint(h, p, "from_x", "from_y");
+        ResolvePoint(h, p, "to_x", "to_y");
         Activate(h);
-        int originX, originY;
-        double dragScaleX = 1.0, dragScaleY = 1.0;
-        string dragShot = Json.GetString(p, "screenshotId");
-        if (!string.IsNullOrEmpty(dragShot))
-        {
-            ShotRegion region = ResolveShot(h, dragShot);
-            AssertPointInsideShot(fromX, fromY, region, dragShot, "drag start");
-            AssertPointInsideShot(toX, toY, region, dragShot, "drag end");
-            originX = region.OriginX; originY = region.OriginY;
-            dragScaleX = region.ScaleX; dragScaleY = region.ScaleY;
-        }
-        else
-        {
-            RECT b = BoundsOf(h);
-            originX = b.Left; originY = b.Top;
-        }
-        int fx = originX + (int)Math.Round(fromX * dragScaleX);
-        int fy = originY + (int)Math.Round(fromY * dragScaleY);
-        int tx = originX + (int)Math.Round(toX * dragScaleX);
-        int ty = originY + (int)Math.Round(toY * dragScaleY);
-
-        MarkCursor(fx, fy);
-        SetCursorPos(fx, fy);
-        System.Threading.Thread.Sleep(60);
+        ResolveWindow(p);
+        PointerTarget from = ResolvePoint(h, p, "from_x", "from_y");
+        PointerTarget to = ResolvePoint(h, p, "to_x", "to_y");
+        if (from.Surface != to.Surface) throw new ToolError("bad_request", "drag endpoints must be in one window");
+        const string intercepted = "drag_intercepted_by_foreign_window";
+        EnsureOverlay(8000);
         CheckCancel(p);
-        SendMouse(MOUSEEVENTF_LEFTDOWN);
+        MovePointer(from.Surface, from.Point, intercepted);
+        Hold(60, p);
+        AssertPointOwner(from.Surface, from.Point, intercepted);
+        AssertPointerReady(h, from);
+        if (IsDown(1)) throw new ToolError("input_busy", "the left button is already held");
+        bool pressedButton = false;
+        List<ushort> pressed = new List<ushort>();
         try
         {
-            System.Threading.Thread.Sleep(80);
-            const int steps = 14;
+            foreach (ushort key in modifiers)
+                if (!IsDown(key)) { SendVk(key, false); pressed.Add(key); }
+            SendMouse(MOUSEEVENTF_LEFTDOWN);
+            pressedButton = true;
+            Hold(80, p);
+            const int steps = 16;
             for (int i = 1; i <= steps; i++)
             {
                 CheckCancel(p);
-                int x = fx + (tx - fx) * i / steps;
-                int y = fy + (ty - fy) * i / steps;
-                SetCursorPos(x, y);
-                System.Threading.Thread.Sleep(18);
+                if (GetForegroundWindow() != h) throw new ToolError(intercepted, "foreground changed during dragging");
+                POINT point = new POINT {
+                    X = from.Point.X + (to.Point.X - from.Point.X) * i / steps,
+                    Y = from.Point.Y + (to.Point.Y - from.Point.Y) * i / steps
+                };
+                MovePointer(from.Surface, point, intercepted);
+                Hold(18, p);
             }
-            System.Threading.Thread.Sleep(90);
+            Hold(90, p);
             CheckCancel(p);
+            AssertPointOwner(to.Surface, to.Point, intercepted);
+            AssertPointerReady(h, to);
         }
-        finally { SendMouse(MOUSEEVENTF_LEFTUP); }
+        finally
+        {
+            if (pressedButton)
+            {
+                ReleaseMouse(MOUSEEVENTF_LEFTUP, 1);
+            }
+            ReleaseModifiers(pressed);
+        }
 
         Dictionary<string, object> r = new Dictionary<string, object>();
         r["dragged"] = true;
-        r["from"] = new long[] { fx, fy };
-        r["to"] = new long[] { tx, ty };
+        r["from"] = new int[] { from.Point.X, from.Point.Y };
+        r["to"] = new int[] { to.Point.X, to.Point.Y };
         return r;
     }
 

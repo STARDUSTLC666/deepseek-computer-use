@@ -1,9 +1,7 @@
+import { ensurePrepared, BIN_DIR } from '../lib/build-helper.mjs';
 import { HelperBridge } from '../lib/bridge.js';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 
-const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const bridge = new HelperBridge({ exe: path.join(ROOT, 'native/bin/dsh-computer-use-helper.exe'), timeoutMs: 20000 });
+const bridge = new HelperBridge({ exe: (await ensurePrepared()).helperPath, timeoutMs: 20000, env: { DSH_CU_COMPONENT_DIR: BIN_DIR } });
 
 try {
   const started = await bridge.request('start_audio_recording', { maxDurationMs: 5000 }, { turnToken: 't' });

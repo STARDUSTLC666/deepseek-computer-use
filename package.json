@@ -1,6 +1,6 @@
 {
   "name": "deepseek-computer-use",
-  "version": "0.2.10",
+  "version": "0.3.0",
   "description": "DSH 社区 Windows 桌面插件：窗口截图、界面控件、鼠标键盘、会话授权与操作审计。欢迎提交 issues 和 PR。",
   "type": "module",
   "main": "lib/index.js",
@@ -8,7 +8,8 @@
     ".": "./lib/index.js",
     "./cordis.patch.yml": "./cordis.patch.yml",
     "./package.json": "./package.json",
-    "./client": "./lib/update-client.js"
+    "./client": "./lib/update-client.js",
+    "./api": "./lib/api.js"
   },
   "files": [
     "lib",
@@ -32,10 +33,10 @@
   "scripts": {
     "build": "node lib/build.mjs && node scripts/build-updates.mjs",
     "build:helper": "node lib/build.mjs",
-    "test": "node scripts/build-updates.mjs && node --test test/contracts.test.mjs test/bridge.test.mjs",
+    "test": "node scripts/build-updates.mjs && node --test test/contracts.test.mjs test/bridge.test.mjs && node test/integration.mjs",
     "test:contracts": "node --test test/contracts.test.mjs test/bridge.test.mjs",
     "test:harness": "node test/harness.mjs",
-    "test:all": "npm test && npm run test:integration && node test/parity.mjs && node test/parity-js.mjs",
+    "test:all": "npm test && node test/parity.mjs && node test/parity-js.mjs",
     "test:integration": "node test/integration.mjs"
   },
   "dsh": {
@@ -47,7 +48,8 @@
       "inject": [
         "@deepseek-ai/dsh-client-ui-settings",
         "@deepseek-ai/dsh-client-ui-layout",
-        "@deepseek-ai/dsh-client-ui-sidebar"
+        "@deepseek-ai/dsh-client-ui-sidebar",
+        "@deepseek-ai/dsh-client-ui-primitives"
       ]
     }
   },
@@ -86,5 +88,10 @@
     "@stardustlc/dsh-updates": "0.1.4"
   },
   "packageManager": "pnpm@11.7.0",
-  "icon": "./assets/plugin-icon.webp"
+  "icon": "./assets/plugin-icon.webp",
+  "devDependencies": {
+    "clsx": "2.1.1",
+    "postcss": "8.5.6",
+    "postcss-modules": "6.0.1"
+  }
 }

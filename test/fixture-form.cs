@@ -6,9 +6,13 @@ using System.Windows.Forms;
 // process, because shell windows are hard-denied by the plugin's safety layer.
 public static class FixtureForm
 {
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    static extern bool SetProcessDpiAwarenessContext(IntPtr context);
+
     [STAThread]
     public static void Main(string[] args)
     {
+        try { SetProcessDpiAwarenessContext(new IntPtr(-4)); } catch (EntryPointNotFoundException) { }
         Application.EnableVisualStyles();
         Form form = new Form();
         form.Text = "DSH CU Test Form";
@@ -45,6 +49,34 @@ public static class FixtureForm
         status.Text = "ready";
         status.Left = 180; status.Top = 98; status.Width = 320;
         form.Controls.Add(status);
+
+        if (args.Length == 2 && args[0] == "--geometry-file")
+        {
+            // Keep this dedicated input target outside other applications' z-order during the holding test.
+            form.TopMost = true;
+            string path = args[1];
+            string previous = "";
+            Rectangle original = Rectangle.Empty;
+            Timer timer = new Timer();
+            timer.Interval = 40;
+            timer.Tick += delegate {
+                try
+                {
+                    if (!System.IO.File.Exists(path)) return;
+                    string command = System.IO.File.ReadAllText(path);
+                    if (command == previous) return;
+                    if (original.IsEmpty) original = form.Bounds;
+                    if (command.StartsWith("large:")) form.ClientSize = new Size(1920, 1080);
+                    else if (command.StartsWith("move:")) form.Location = new Point(form.Left + 24, form.Top + 12);
+                    else if (command.StartsWith("restore:")) form.Bounds = original;
+                    else return;
+                    previous = command;
+                    System.IO.File.WriteAllText(path + ".done", command);
+                }
+                catch (System.IO.IOException) { }
+            };
+            timer.Start();
+        }
 
         Application.Run(form);
     }

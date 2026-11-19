@@ -32,7 +32,7 @@ Restart the host after installation. This package operates the Windows computer 
 
 ## Use
 
-Start a task that needs a desktop app. Observe the window and controls before acting, and grant access to the intended app for the session. The 16 tools cover window discovery, screenshots, mouse and keyboard, UI Automation controls and optional system audio recording.
+Start a task that needs a desktop app. Observe the window and controls before acting, and grant access to the intended app for the session. The 17 flat tools and the CUA object bridge cover window discovery, screenshots, mouse and keyboard, UI Automation controls and optional system audio recording.
 
 The native helper uses Windows UI Automation, SendInput and Windows.Graphics.Capture. Cancellation or the end of a turn stops its helper; failed actions require a fresh observation before retrying. Approval-required operations refuse when the host cannot ask. This is not an operating-system sandbox for untrusted applications.
 

@@ -1,11 +1,11 @@
 # deepseek-computer-use —— Windows 桌面控制（Computer Use）插件。
 #
-# 安装即向宿主注册 16 个工具：list_apps / list_windows / get_window / launch_app /
+# 安装即向宿主注册 17 个平铺工具：list_apps / list_windows / get_window / launch_app /
 # get_window_state / click / press_key / type_text / scroll / set_value / drag /
 # perform_secondary_action / activate_window / start_audio_recording /
-# stop_audio_recording / computer_use_health。
+# stop_audio_recording / computer_use_health / mouse_move。
 #
-# 首次加载会在 native/bin 下用系统自带 csc.exe 编译 helper（无需 .NET SDK、
+# 首次加载会用系统自带 csc.exe 编译并缓存 helper（无需 .NET SDK、
 # 无 npm 原生依赖）。全部配置项都有安全默认值，空配置即可启动：
 #
 #   - id: deepseek-computer-use
@@ -25,4 +25,8 @@
 - insert:
     - id: deepseek-computer-use
       name: 'deepseek-computer-use'
-      config: {}
+      config:
+        exposeMode: hybrid
+        screenshotTarget: null
+        maxClickHoldMs: 5000
+        requireSystemPointerApproval: true

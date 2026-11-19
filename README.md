@@ -19,8 +19,9 @@
 ## 功能
 
 - 先查看窗口截图或界面控件，再决定下一步。
-- 通过会话应用授权限制操作范围。
+- 按应用选择本会话允许、始终允许或拒绝，可从侧栏「电脑控制」工作台撤销授权。
 - 检查实际结果，保留操作审计与中断能力。
+- 在工作台并排查看窗口快照、编号控件和抓屏耗时。工作台提供四种布局，并与 Suite 共用皮肤设置。
 
 ## 安装
 
@@ -44,15 +45,24 @@ dsh plugin --profile desktop add deepseek-computer-use
 
 > 先查看目标应用的窗口和控件，说明下一步计划，暂不点击或输入。
 
+### 工具和直控命令
+
+默认暴露 17 个平铺工具及 CUA 对象桥接。`exposeMode` 可选 `hybrid`、`tools`、`cua`。已挂载 TypeScript PTC 的会话可调用 `cua_run_code`，通过 `cua.getApp(id)` 和 `app.getWindow(windowId)` 取得窗口对象。
+
+指针工具支持 `relative: true`，坐标采用最近观测的客户区千分比整数 `0..999`。窗口平移会重新计算原点，尺寸或 DPI 改变时会返回 `WINDOW_CHANGED`，需要重新观测。`get_window_state` 可用 `region` 裁剪截图。纯文本模型使用 `include_screenshot: false, include_text: true`。
+
+`/cu status` 查看状态，`/cu stop` 停止当前轮次的电脑控制，`/cu restore-cursor` 恢复系统光标，`/cu revoke <应用名或 ID>` 撤销授权。
+
 ## 开始前要知道
 
 面向 Windows 10/11；应用权限、控件支持和桌面环境会影响可操作范围。
+Helper 与光标覆盖层首次使用时由系统 `csc.exe` 编译，按源码哈希缓存。WGC 和 WASAPI 组件可以单独构建，常规截图支持 PrintWindow 和 BitBlt。
 
 配置、完整工具与排错见[详细使用说明](https://github.com/STARDUSTLC666/deepseek-computer-use/blob/main/docs/REFERENCE.zh.md)。
 
 ## 插件更新
 
-在工作台或原生插件详情页底部检查更新。默认自动检查，**默认不自动安装**；是否安装、何时重启由你决定。Suite 管理的组件随整包更新。[查看更新规则](https://github.com/STARDUSTLC666/deepseek-computer-use/blob/main/docs/REFERENCE.zh.md)。
+在工作台或原生插件详情页底部检查更新。独立安装时按本插件保存更新偏好，默认打开自动检查、关闭自动安装。工作台可并发探测 npmjs 和 npmmirror。Suite 管理的组件随整包更新。[查看更新规则](https://github.com/STARDUSTLC666/deepseek-computer-use/blob/main/docs/REFERENCE.zh.md)。
 
 ## 文档
 

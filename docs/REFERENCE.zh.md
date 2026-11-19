@@ -19,7 +19,7 @@
 
 让 DeepSeek Harness 操作 Windows 桌面软件：发现窗口、查看截图和界面控件，再执行鼠标键盘操作。适合没有可用 API 的图形界面任务；提供会话应用授权、敏感操作确认与审计。
 
-提供 16 个工具，覆盖窗口发现、截图观测、鼠标键盘、控件操作和可选的系统音频录制。
+提供 17 个平铺工具及 CUA 对象桥接，覆盖窗口发现、截图观测、鼠标键盘、控件操作和可选的系统音频录制。
 支持会话独立授权、敏感操作审批与审计；取消或回合结束时停止原生助手，
 操作失败后要求重新观察，减少结果不明时的重复操作。
 
@@ -94,8 +94,8 @@ npm run test:harness -- --dsh-root /path/to/node_modules/@deepseek-ai/dsh
 
 这是通过 DSH 的 `apply(ctx)` / `inject` / bundle patch 接入的独立插件。
 工具注册使用标准 JSON Schema，截图通过 `attachments` 保存并输出模型可见的 image block，
-应用授权与危险动作通过 `approval.request` 审批并写入会话审计。
-每个会话独立保存授权、helper、截图与元素快照；同一桌面的工具调用串行执行。
+应用授权通过宿主 User Questions 选择本会话允许、始终允许或拒绝。危险动作通过 `approval.request` 单独审批并写入会话审计。
+持久授权按 profile 保存。每个会话独立持有临时授权、Helper、截图与元素快照。同一桌面的工具调用串行执行。
 DSH 附件存储缩小截图时，坐标会自动换算回原始抓屏像素。
 
 在需要使用的 DSH profile 中安装，例如 Git Bash 下：
@@ -133,11 +133,11 @@ DSH 官方已有需要显式启用的实验性 Computer Use 方案，包括 Cua 
 
 ```text
 DSH 宿主
-  └─ lib/index.js        apply(ctx) → 注册 16 个工具；图片走 attachments；审批走 approval
+  └─ lib/index.js        apply(ctx) → 注册 17 个平铺工具、CUA 桥接与工作台
        ├─ lib/tools.js   工具定义（Codex window2 语义）
        ├─ lib/safety.js  白名单/黑名单 + 危险动作审批门
        └─ lib/bridge.js  常驻进程 + 串行 JSON-lines RPC + 超时/取消
-            └─ native/bin/dsh-computer-use-helper.exe   （用系统 csc.exe 现编）
+            └─ native/.build/prepared/<hash>/dsh-computer-use-helper.exe
                  ├─ native/Driver.cs   IPlatformDriver 契约 + WindowsDriver（UIA / SendInput / PrintWindow）
                  ├─ native/Json.cs     零依赖 JSON 解析与序列化
                  └─ native/Program.cs  stdio 分发
@@ -159,6 +159,7 @@ DSH 宿主
 | `launch_app` | 启动应用（可带参数），默认需要审批 |
 | `get_window_state` | 观测：带编号的无障碍树 +（可选）窗口截图 |
 | `click` | 按元素编号（优先走 Invoke，抗遮挡）或窗口相对坐标点击 |
+| `mouse_move` | 解析悬停坐标。显式申请 `useSystemPointer: true` 时可移动系统指针 |
 | `press_key` | 单键或组合键，X keysym 风格：`Control_L+s`、`Return` |
 | `type_text` | 注入 Unicode 文本（与键盘布局无关，中文安全） |
 | `scroll` | 在坐标或元素处滚动 |

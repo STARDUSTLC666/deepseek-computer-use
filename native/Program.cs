@@ -86,6 +86,7 @@ public static class Program
             string method = Json.GetString(req, "method");
             Dictionary<string, object> p = Json.AsObject(Json.Get(req, "params"));
             if (p == null) p = new Dictionary<string, object>();
+            p["__requestId"] = id;
             // Codex ships the budget with every call (x-oai-cua-request-budget-ms) and the
             // helper honours it; here it bounds capture waits and marks overruns.
             Budget.Begin(Json.GetLong(p, "__budgetMs", 0), Json.GetString(p, "__cancelFile"));
@@ -111,6 +112,11 @@ public static class Program
         switch (method)
         {
             case "ping": return _driver.Ping(p);
+            case "get_system_status": return _driver.GetSystemStatus(p);
+            case "get_app_icons": return _driver.GetAppIcons(p);
+            case "revoke_app": return _driver.RevokeApp(p);
+            case "mouse_move": return _driver.MouseMove(p);
+            case "show_window": return _driver.ShowWindowWithoutActivation(p);
             case "hello": return _driver.Hello(p);
             case "restore_cursor": return _driver.RestoreCursor(p);
             case "close": return _driver.Close(p);

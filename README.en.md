@@ -18,8 +18,9 @@
 ## Features
 
 - Inspect a screenshot or UI controls before the next step.
-- Limit actions through session-level application approval.
+- Grant access for the session, grant it persistently, or refuse it. Manage those decisions from the **Computer Use** sidebar panel.
 - Check the result and keep audit and cancellation controls.
+- Inspect window snapshots, numbered controls and capture timings side by side. The workbench shares four layout styles with Suite.
 
 ## Install
 
@@ -43,9 +44,18 @@ Example request：
 
 > Inspect the target app window and controls, then explain the next step without clicking or typing.
 
+### Tools and direct commands
+
+The default hybrid mode registers 17 flat tools and a CUA object bridge. Set `exposeMode` to `hybrid`, `tools`, or `cua`. With a TypeScript PTC runtime mounted, use `cua_run_code` to select an app with `cua.getApp(id)` and a window with `app.getWindow(windowId)`.
+
+Pointer tools accept integer thousandths from `0` to `999` with `relative: true` after observing the client area. The helper follows window translation and reports `WINDOW_CHANGED` after a resize or DPI change. Pass `region` to capture part of a window. For text-only routes, use `include_screenshot: false, include_text: true`.
+
+Use `/cu status` for diagnostics, `/cu stop` to stop Computer Use for the current turn, `/cu restore-cursor` to restore the system cursor, and `/cu revoke <app name or ID>` to revoke access.
+
 ## Before you start
 
 For Windows 10/11. Permissions, control support and the desktop environment affect what can be automated.
+Windows `csc.exe` builds the helper and cursor overlay into a source-hashed cache. Optional WGC and WASAPI components can be built separately. PrintWindow and BitBlt remain available for window capture.
 
 Configuration, detailed tools and troubleshooting: [full reference](https://github.com/STARDUSTLC666/deepseek-computer-use/blob/main/docs/REFERENCE.en.md).
 

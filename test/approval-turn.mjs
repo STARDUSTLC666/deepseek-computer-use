@@ -1,17 +1,15 @@
+import { ensurePrepared, BIN_DIR } from '../lib/build-helper.mjs';
 import { HelperBridge } from '../lib/bridge.js';
-import { spawn, execFileSync } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
-for (const name of ['dsh-cu-fixture.exe', 'dsh-cu-overlay.exe']) {
-  try { execFileSync('taskkill', ['/IM', name, '/F'], { stdio: 'ignore' }); } catch {}
-}
 const fixture = spawn(path.join(ROOT, 'test/bin/dsh-cu-fixture.exe'), [], { stdio: 'ignore' });
 await new Promise(r => setTimeout(r, 1800));
 
-const bridge = new HelperBridge({ exe: path.join(ROOT, 'native/bin/dsh-computer-use-helper.exe'), timeoutMs: 20000 });
+const bridge = new HelperBridge({ exe: (await ensurePrepared()).helperPath, timeoutMs: 20000, env: { DSH_CU_COMPONENT_DIR: BIN_DIR } });
 const token = 'turn-x';
 
 const cfg = await bridge.request('configure', { requireAppApproval: true }, { turnToken: token });

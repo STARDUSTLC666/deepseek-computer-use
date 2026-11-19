@@ -1,3 +1,4 @@
+import { ensurePrepared, BIN_DIR } from '../lib/build-helper.mjs';
 import { HelperBridge } from '../lib/bridge.js';
 import { spawn } from 'node:child_process';
 import { execFileSync } from 'node:child_process';
@@ -11,7 +12,7 @@ try { execFileSync('taskkill', ['/IM', 'dsh-cu-overlay.exe', '/F'], { stdio: 'ig
 const fixture = spawn(path.join(ROOT, 'test/bin/dsh-cu-fixture.exe'), [], { stdio: 'ignore' });
 await new Promise(r => setTimeout(r, 1800));
 
-const bridge = new HelperBridge({ exe: path.join(ROOT, 'native/bin/dsh-computer-use-helper.exe'), timeoutMs: 20000 });
+const bridge = new HelperBridge({ exe: (await ensurePrepared()).helperPath, timeoutMs: 20000, env: { DSH_CU_COMPONENT_DIR: BIN_DIR } });
 const wins = await bridge.request('list_windows', {}, { turnToken: 'turn-A' });
 const target = wins.windows.find(w => String(w.title).includes('DSH CU Test Form'));
 console.log('fixture:', target.id);
