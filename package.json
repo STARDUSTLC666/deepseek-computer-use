@@ -1,6 +1,6 @@
 {
   "name": "deepseek-computer-use",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "DeepSeek Harness Windows 桌面操作插件：窗口截图、界面控件树、鼠标键盘、会话授权与操作审计。欢迎提交 issues 和 PR.",
   "type": "module",
   "main": "lib/index.js",
@@ -46,7 +46,9 @@
     "manifestVersion": 1,
     "bundle": {
       "patch": "./cordis.patch.yml",
-      "platforms": ["win32"]
+      "platforms": [
+        "win32"
+      ]
     },
     "client": {
       "platform": "web",
@@ -95,7 +97,7 @@
     "access": "public"
   },
   "dependencies": {
-    "@stardustlc/dsh-updates": "0.2.7"
+    "@stardustlc/dsh-updates": "0.2.9"
   },
   "packageManager": "pnpm@11.7.0",
   "icon": "./assets/plugin-icon.webp",

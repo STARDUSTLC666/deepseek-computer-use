@@ -1,5 +1,11 @@
 # 更新记录
 
+## 0.3.1 (2026-11-20)
+
+- 完成发布前授权、会话隔离、撤销、取消与工作台输入限制复查，并验证原生组件构建及不操控桌面的契约回归。
+- Verify application consent, session isolation, revocation, cancellation, workbench input limits, native builds, and mock contract regressions before release.
+- 同步共享更新组件 0.2.9，修复取消窗口和失败响应清理，并确保运行中旧协调器在空闲后接管修复。
+
 ## 0.3.0 (2026-11-20)
 
 - 新增 Harness「电脑控制」工作台，支持四种 Suite 同步布局、权限矩阵、截图与 UIA 联动、操作审计、PTC 和内联更新。
