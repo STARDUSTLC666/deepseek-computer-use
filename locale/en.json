@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Computer Use",
+    "description": "Windows desktop automation for DeepSeek Harness >=0.2.2-rc.3: window screenshots, UIA control trees, mouse and keyboard input, session consent, and action auditing."
+  }
+}

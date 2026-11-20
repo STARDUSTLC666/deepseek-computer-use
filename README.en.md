@@ -4,6 +4,8 @@
 
 **Let DSH work with Windows apps within your approval.**
 
+Windows desktop automation plugin for DeepSeek Harness (`>=0.2.2-rc.3`): supports window screenshots, UIA control tree inspection, mouse/keyboard input, per-session app consent, and action auditing, with Cordis `ctx.effect` cleanup on hot reload.
+
 [![downloads](https://raw.githubusercontent.com/STARDUSTLC666/dsh-suite/npm-downloads/assets/dsh-computer-use-downloads.svg)](https://www.npmjs.com/package/deepseek-computer-use) [![total downloads](https://raw.githubusercontent.com/STARDUSTLC666/dsh-suite/npm-downloads/assets/dsh-computer-use-total-downloads.svg)](https://www.npmjs.com/package/deepseek-computer-use)
 
 **[Install](#install) · [Workflow](#start-using-it) · [Full guide](https://github.com/STARDUSTLC666/deepseek-computer-use/blob/main/docs/REFERENCE.en.md)**

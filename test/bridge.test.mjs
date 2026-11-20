@@ -49,6 +49,13 @@ test('abort stops active input, blocks that turn, and permits a fresh turn', asy
   assert.notEqual((await bridge.request('ping', {}, { turnToken: 'b' })).pid, first.pid);
 }));
 
+test('stopped-turn history remains bounded while retaining recent turn barriers', async () => fixture(async bridge => {
+  for (let index = 0; index < 300; index++) await bridge.stopTurn('turn-' + index);
+  assert.ok((await bridge.request('ping', {}, { turnToken: 'turn-0' })).pid > 0,
+    'an evicted old token does not grow the process-local history forever');
+  await assert.rejects(() => bridge.request('ping', {}, { turnToken: 'turn-299' }), { code: 'turn_ended' });
+}));
+
 test('physical Escape exit remains blocked for the rest of its turn', async () => fixture(async bridge => {
   await bridge.request('ping', {}, { turnToken: 'a' });
   await assert.rejects(() => bridge.request('escape_exit', {}, { turnToken: 'a' }), { code: 'cancelled_by_user' });

@@ -8,6 +8,46 @@
 - Helper v3 增加客户区千分比坐标、窗口平移补偿、缩放与 DPI 防护、区域截图、长按释放校验和拖拽路径校验。
 - 原生编译产物按内容哈希缓存，子进程剥离 Electron 与 Node 调试环境变量。截图诊断记录抓屏和附件阶段耗时。
 
+## 0.2.19 (2026-11-20)
+
+- 升级共享更新组件至 `@stardustlc/dsh-updates@0.2.6`：同步修复浮卡与日历按钮重叠、详情页/工作台挂载时更新提示不及时让位、`package-moved` 与包管理器错误诊断文案，并保留过期检查自动刷新。
+- Upgrade `@stardustlc/dsh-updates` to `0.2.6`: fix floating Calendar FAB clearance, reminder yield on native detail/workbench mount, and `package-moved` / package-manager error guidance; retain stale-check refresh.
+
+## 0.2.18 (2026-11-18)
+
+- 升级共享更新组件至 `@stardustlc/dsh-updates@0.2.5`：独立安装插件详情页底栏去重（保留组合包组件委派与对话页热更新卡片），补齐 `bundle-in-use` 组合包占用提示说明，并在检查结果过期或远端版本变更时自动刷新元数据，彻底消除 `check-first` 卡顿。
+- Upgrade `@stardustlc/dsh-updates` to `0.2.5`: deduplicate standalone native plugin detail footers while keeping Suite delegation and in-chat reminder cards, surface clear `bundle-in-use` guidance, and automatically refresh expired update checks without `check-first` stalls.
+
+## 0.2.17 (2026-11-18)
+
+- 升级共享更新组件至 `@stardustlc/dsh-updates@0.2.4`：对话页新增一键热更新提醒卡片，自动检查周期缩短至 6 小时，手动热更新后可顺手开启包含兼容功能小版本的空闲自动更新。
+- Upgrade `@stardustlc/dsh-updates` to `0.2.4`: add an actionable in-chat hot-update reminder card, 6-hour background update checks, compatible minor+patch idle auto-updates, and a post-update opt-in prompt.
+
+## 0.2.16 (2026-11-18)
+
+- 同步 `@stardustlc/dsh-updates` 0.2.3：侧边栏工作台平时默认隐藏底部更新栏（零高度占用），仅在检测到兼容新版本或执行更新时浮现单行精简提示条；完整更新设置与检查入口统一保留在 DSH「插件」详情页底部。
+- Sync `@stardustlc/dsh-updates` 0.2.3: keep the sidebar workbench update footer hidden by default when up-to-date, surfacing a single-line compact strip only for actionable updates or active jobs while retaining full controls in native Plugin Details.
+
+## 0.2.15 (2026-11-18)
+
+- 更新区底部新增克制、无打扰的 GitHub 点赞与问题反馈快捷链接，并完善中英文检索关键词。
+- Add subtle, non-intrusive GitHub Star and issue feedback links in the update footer, and expand search keywords.
+
+## 0.2.14 (2026-11-18)
+
+- 同步 `@stardustlc/dsh-updates` 0.2.1：恢复 Suite 整包统一更新（移除独立拆包迁移），保留整包与独立插件的原地热更新与失败自动回滚。
+- Sync `@stardustlc/dsh-updates` 0.2.1: restore unified Suite bundle updates (removing standalone conversion) while retaining in-place hot reload and automatic rollback.
+
+## 0.2.13 (2026-11-18)
+
+- 深度适配 DSH 0.2.2：补齐 manifestVersion 1、双语元数据与 win32 平台声明；改用 Cordis 4 `ctx.effect` 异步清理桥接进程与光标状态，合并同会话并发启动并兼容 `ctx.approval` 审批服务。
+- Deeply adapt to DSH 0.2.2: declare manifestVersion 1, bilingual locale metadata, and win32 platform support; migrate bridge and cursor teardown to Cordis 4 `ctx.effect`, deduplicate concurrent session startups, and support `ctx.approval` fallback.
+
+## 0.2.11 (2026-11-17)
+
+- 在原生插件详情页单独检查和安装兼容版本。自动安装默认关闭，可为该插件开启空闲时的稳定补丁更新。
+- Check and install compatible versions separately from the native plugin details. Automatic installation is off by default. Enable it for this plugin to apply stable patches while idle.
+
 ## 0.2.10 (2026-11-14)
 
 - 适配 DSH 0.2.2-rc.3：最低 Harness 版本声明提升至 0.2.2-rc.3，运行时代码未变。
