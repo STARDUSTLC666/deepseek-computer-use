@@ -1,12 +1,19 @@
 # 更新记录
 
-## 0.3.0 (2026-11-16)
+## 0.3.0 (2026-11-20)
 
 - 新增 Harness「电脑控制」工作台，支持四种 Suite 同步布局、权限矩阵、截图与 UIA 联动、操作审计、PTC 和内联更新。
 - 接入 provider 互斥槽位、`/cu` 直控命令、应用授权持久化、撤销代次和原生 64px 图标。
 - 提供 17 个平铺工具、保留式 CUA 应用和窗口对象，以及可用 TypeScript PTC 运行时下的 `cua_run_code`。
 - Helper v3 增加客户区千分比坐标、窗口平移补偿、缩放与 DPI 防护、区域截图、长按释放校验和拖拽路径校验。
 - 原生编译产物按内容哈希缓存，子进程剥离 Electron 与 Node 调试环境变量。截图诊断记录抓屏和附件阶段耗时。
+- 修复工作台请求体按字符而非字节限制造成的边界，超限流式请求现在在触碰执行后端前拒绝。
+- Preserve the 0.3.0 Computer Use workbench and safety model; bound streaming request bodies by UTF-8 bytes before dispatch and retain the Windows fixture regression.
+
+## 0.2.20 (2026-11-20)
+
+- 升级共享更新组件至 `@stardustlc/dsh-updates@0.2.7`：对话页「有新版本」提醒浮卡支持无交互 15 秒自动收起（悬停、聚焦、查看记录或确认弹窗时自动暂停，安装成功提示 6 秒收起，安装中/失败/需要重启仍保持常驻不隐藏）。
+- Upgrade `@stardustlc/dsh-updates` to `0.2.7`: auto-dismiss idle update reminder cards after 15s and silent complete cards after 6s while pausing on hover/focus/notes/dialogs and keeping active, failed, or restart-required cards pinned.
 
 ## 0.2.19 (2026-11-20)
 

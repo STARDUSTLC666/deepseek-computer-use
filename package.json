@@ -95,7 +95,7 @@
     "access": "public"
   },
   "dependencies": {
-    "@stardustlc/dsh-updates": "0.2.6"
+    "@stardustlc/dsh-updates": "0.2.7"
   },
   "packageManager": "pnpm@11.7.0",
   "icon": "./assets/plugin-icon.webp",
