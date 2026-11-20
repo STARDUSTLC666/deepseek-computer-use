@@ -300,6 +300,36 @@ test('profile grants persist, revocation invalidates old handles, and retry does
   await installed.release(agent);
 });
 
+test('releasing an unscoped environment cancels its pending application consent', async () => {
+  let resolve, observed
+  const pending = new Promise(done => { resolve = done })
+  const access = createAccess({ approval:{request:async input=>{observed=input.signal; return pending}} }, resolveConfig(), {control(){}})
+  const ensured = access.ensure(window.app, {})
+  // ensure() begins by asynchronously refreshing the store before opening consent.
+  for (let index=0; index<20 && !observed; index++) await new Promise(done=>setImmediate(done))
+  assert.ok(observed)
+  access.forget(undefined)
+  resolve('allowed-once')
+  await assert.rejects(ensured)
+  assert.equal(observed.aborted, true)
+  assert.deepEqual((await access.applications()).sessionGrants, [])
+  await access.dispose()
+});
+
+test('releasing a scope during native consent cannot cache a grant after approval settles', async () => {
+  for(const session of [undefined,{id:'fixture-session'}]) {
+    const ready=Promise.withResolvers(),gate=Promise.withResolvers()
+    const access=createAccess({approval:{request:async()=> 'allowed-once'}},resolveConfig(),{control(){}})
+    const exec=session?{agent:{session}}:{}
+    const pending=access.ensure(window.app,exec,{confirmNative:async()=>{ready.resolve();await gate.promise}})
+    const rejected=assert.rejects(pending,{code:'APP_ACCESS_REVOKED'})
+    await ready.promise;access.forget(session);gate.resolve()
+    await rejected
+    assert.deepEqual((await access.applications()).sessionGrants,[])
+    await access.dispose()
+  }
+});
+
 test('the two npm registry probes start concurrently and settle independently', async () => {
   const calls = [];
   const deferred = [Promise.withResolvers(), Promise.withResolvers()];
