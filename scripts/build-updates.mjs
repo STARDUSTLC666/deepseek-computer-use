@@ -39,12 +39,12 @@ const entry = `window.__ModuleLoader__.load({
       inject: ['slots'],
       apply(ctx) {
         const label = () => String(ctx.get?.('locale')?.getSnapshot?.().active ?? document.documentElement.lang).startsWith('en')
-          ? 'Computer Use' : '电脑控制';
+          ? 'Computer Use' : '电脑操作';
         const watchTheme = listener => ctx.on('theme/change', listener);
         ctx.slots.inject('main', () => ctx.slots.register({ name: 'main', key: 'deepseek-computer-use',
           inject: () => ({ locale: ctx.get?.('locale'), theme: ctx.get?.('theme'), watchTheme }) }, ConsoleWorkbench));
         ctx.slots.inject('sidebar.panellist', () => ctx.slots.register({ name: 'sidebar.panellist',
-          id: 'deepseek-computer-use', order: 56, label: label() }, function ComputerUseIcon({ size = 16 }) {
+          id: 'deepseek-computer-use', order: 56, label: label }, function ComputerUseIcon({ size = 16 }) {
           return React.createElement('svg', { width: size, height: size, viewBox: '0 0 24 24', fill: 'none',
             stroke: 'currentColor', strokeWidth: 1.7, strokeLinecap: 'round', 'aria-hidden': true },
           React.createElement('rect', { x: 2, y: 3, width: 20, height: 14, rx: 2.5 }),

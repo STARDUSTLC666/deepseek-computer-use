@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
+import vm from 'node:vm';
 import { apply, buildTools, resolveConfig } from '../lib/index.js';
 import { requestApproval } from '../lib/safety.js';
 import { buildCleanWin32Env } from '../lib/bridge.js';
@@ -347,4 +348,93 @@ test('the two npm registry probes start concurrently and settle independently', 
   const results = await probe;
   assert.equal(results[0].version, '0.3.1');
   assert.equal(results[1].error, 'registry-unavailable');
+});
+
+test('DSH_CU_AUDIO=1 enables audio config and lets start_audio_recording pass the plugin gate', async () => {
+  const previous = process.env.DSH_CU_AUDIO;
+  try {
+    delete process.env.DSH_CU_AUDIO;
+    assert.equal(resolveConfig({}).audio, false);
+    {
+      const { tools } = setup({ dryRun: true });
+      await assert.rejects(() => tools.get('start_audio_recording').execute({}, {}), /DSH_CU_AUDIO=1/);
+    }
+
+    process.env.DSH_CU_AUDIO = '0';
+    assert.equal(resolveConfig({}).audio, false);
+
+    process.env.DSH_CU_AUDIO = '1';
+    assert.equal(resolveConfig({}).audio, true);
+    assert.equal(resolveConfig({ audio: false }).audio, true);
+
+    const { tools, calls, approvals } = setup({});
+    const result = await tools.get('start_audio_recording').execute({ max_duration_ms: 5000 }, {});
+    assert.deepEqual(result, { ok: true });
+    assert.equal(approvals.length, 1);
+    assert.equal(calls.at(-1).method, 'start_audio_recording');
+    assert.equal(calls.at(-1).params.maxDurationMs, 5000);
+  } finally {
+    if (previous === undefined) delete process.env.DSH_CU_AUDIO;
+    else process.env.DSH_CU_AUDIO = previous;
+  }
+});
+
+test('built lib/update-client.js registers sidebar.panellist with a dynamic locale label thunk matching locale/zh.json', async () => {
+  const [bundle, zhLocale] = await Promise.all([
+    readFile(new URL('../lib/update-client.js', import.meta.url), 'utf8'),
+    readFile(new URL('../locale/zh.json', import.meta.url), 'utf8').then(JSON.parse),
+  ]);
+  const loaded = [];
+  const windowMock = {
+    __ModuleLoader__: { load: mod => loaded.push(mod) },
+    addEventListener() {},
+    removeEventListener() {},
+    dispatchEvent() {},
+  };
+  const documentMock = {
+    documentElement: { lang: 'zh-CN' },
+    baseURI: 'http://localhost/',
+    hidden: false,
+    addEventListener() {},
+    removeEventListener() {},
+  };
+  vm.runInNewContext(bundle, {
+    window: windowMock,
+    self: windowMock,
+    globalThis: windowMock,
+    document: documentMock,
+    URL,
+    CustomEvent: class CustomEvent { constructor(type, init) { this.type = type; this.detail = init?.detail; } },
+    localStorage: { getItem: () => null, setItem() {} },
+    setInterval: () => 0,
+    clearInterval() {},
+    setTimeout: () => 0,
+    clearTimeout() {},
+    console,
+  });
+  const mod = loaded.find(item => item?.id === 'deepseek-computer-use');
+  assert.ok(mod, 'deepseek-computer-use client module should load');
+  const plugin = mod.factory(id => {
+    if (id === 'react') return { createElement: () => null, useState: v => [v, () => {}], useEffect() {}, useRef: () => ({}), useMemo: fn => fn(), useCallback: fn => fn, useId: () => 'id' };
+    if (id === '@deepseek-ai/dsh-client-ui-primitives') return { Button: 'button', Input: 'input', Switch: 'input', MenuSurface: 'div' };
+    return {};
+  });
+  let activeLocale = 'zh-CN';
+  const registrations = [];
+  plugin.apply({
+    get: name => (name === 'locale' ? { getSnapshot: () => ({ active: activeLocale }) } : undefined),
+    on: () => () => {},
+    slots: {
+      inject(_slot, fn) { return fn(); },
+      register(options, component) { registrations.push({ options, component }); return () => {}; },
+    },
+  });
+  const sidebar = registrations.find(item => item.options?.name === 'sidebar.panellist' && item.options?.id === 'deepseek-computer-use');
+  assert.ok(sidebar, 'sidebar.panellist slot should be registered');
+  assert.equal(typeof sidebar.options.label, 'function', 'sidebar.panellist label must be a dynamic thunk function');
+  assert.equal(sidebar.options.label(), zhLocale.meta.title);
+  activeLocale = 'en-US';
+  assert.equal(sidebar.options.label(), 'Computer Use');
+  activeLocale = 'zh-CN';
+  assert.equal(sidebar.options.label(), zhLocale.meta.title);
 });

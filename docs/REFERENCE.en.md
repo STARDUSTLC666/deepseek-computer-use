@@ -2,7 +2,7 @@
 
 # deepseek-computer-use
 
-[中文](../README.md)
+[中文](./REFERENCE.zh.md)
 
 [![downloads](https://raw.githubusercontent.com/STARDUSTLC666/dsh-suite/npm-downloads/assets/dsh-computer-use-downloads.svg)](https://www.npmjs.com/package/deepseek-computer-use) [![total downloads](https://raw.githubusercontent.com/STARDUSTLC666/dsh-suite/npm-downloads/assets/dsh-computer-use-total-downloads.svg)](https://www.npmjs.com/package/deepseek-computer-use)
 
@@ -38,11 +38,11 @@ The native helper uses Windows UI Automation, SendInput and Windows.Graphics.Cap
 
 ## Updates
 
-Version controls are at the bottom of native plugin details. Automatic checks are on; automatic installation is off by default. Installation, deferral and update preferences remain user choices. The plugin does not force a DSH restart.
+Requires DSH 0.2.2-rc.3 or newer. Update controls sit at the bottom of the Computer Use workbench as well as native plugin details. Checks, release notes and preferences expand in place, with no separate update page or settings menu. Automatic checks are on by default; **automatic installation is off by default**. Only explicit opt-in permits compatible stable updates (compatible minor and patch releases by default, or patch-only) while idle with no unsaved changes. Installation, deferral, ignore and update preferences remain user choices. The plugin does not force a DSH restart or upgrade, and local-source installations stay unchanged.
 
 ## Documentation and feedback
 
-See the [Chinese guide](../README.md) for the complete tool list, configuration, native payload requirements and platform limitations, and the [changelog](../CHANGELOG.md) for releases.
+See the [Chinese reference](./REFERENCE.zh.md) for the complete tool list, configuration table, safety gates, error-code recovery table, native payload requirements and platform limitations, the bundled skill [computer-use-windows](../skills/computer-use/SKILL.md) for agent workflow guidance, and the [changelog](../CHANGELOG.md) for releases.
 
 Feedback and contributions are welcome: report [issues](https://github.com/STARDUSTLC666/deepseek-computer-use/issues) or submit [pull requests](https://github.com/STARDUSTLC666/deepseek-computer-use/pulls). Include versions, expected and actual behavior, and redact private screenshots or credentials.
 

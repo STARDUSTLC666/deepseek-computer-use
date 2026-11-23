@@ -1,5 +1,11 @@
 # 更新记录
 
+## 0.3.3 (2026-11-23)
+
+- 接入 `DSH_CU_AUDIO=1` 环境变量开关至 `resolveConfig`（与报错提示及原生 helper 对齐），修复侧栏槽位 `sidebar.panellist` 的 `label` 为动态函数以支持运行期中英文切换刷新，并将中文标签与 `locale/zh.json` 统一为「电脑操作」，均补充契约单元测试。
+- 全面重构修正 `docs/REFERENCE.zh.md` 与 `docs/REFERENCE.en.md`（同步协议 v3、区域裁剪与 `mouse_move`、17 平铺工具 + CUA/PTC、7 道安全闸门、24 行错误码处置表、去重章节、移除本机硬编码路径，并修复语言切换与工作台/详情页更新说明）。
+- Wire `DSH_CU_AUDIO=1` into `resolveConfig` to match tool guidance and the native helper; pass `sidebar.panellist` `label` as a live locale thunk and align its Chinese label (`电脑操作`) with `locale/zh.json` (with contract tests); rewrite `docs/REFERENCE.{zh,en}.md` for protocol v3, region crop, `mouse_move`, 17 tools + CUA/PTC, 7 safety gates, error-code recovery table, and clean cross-links.
+
 ## 0.3.2 (2026-11-20)
 
 - 升级共享更新组件至 0.2.10，移除跨插件右下角浮动提醒，保留工作台及插件详情页更新控制。
