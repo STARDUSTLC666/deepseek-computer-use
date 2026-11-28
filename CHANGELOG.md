@@ -1,5 +1,10 @@
 # 更新记录
 
+## 0.3.4 (2026-11-28)
+
+- 更新详情页现在会保留较新检查的结果，慢轮询返回时不再把版本或任务状态退回旧值。
+- Keep newer update-check results and job status when an older background request finishes later.
+
 ## 0.3.3 (2026-11-23)
 
 - 接入 `DSH_CU_AUDIO=1` 环境变量开关至 `resolveConfig`（与报错提示及原生 helper 对齐），修复侧栏槽位 `sidebar.panellist` 的 `label` 为动态函数以支持运行期中英文切换刷新，并将中文标签与 `locale/zh.json` 统一为「电脑操作」，均补充契约单元测试。
